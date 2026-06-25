@@ -21,7 +21,7 @@ class CategoriesScreen extends StatelessWidget {
     final incomeCats = provider.incomeCategories;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 80),
       children: [
         _SectionHeader(title: 'Expense Categories', color: Colors.redAccent),
         if (expenseCats.isEmpty)

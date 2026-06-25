@@ -157,6 +157,9 @@ class TransactionProvider extends ChangeNotifier {
         _expenseCategories = defaultExpenseCategories;
         _incomeCategories = defaultIncomeCategories;
       }
+      if (_expenses.isEmpty && _incomes.isEmpty) {
+        await seedLargeData();
+      }
     }
 
     notifyListeners();
