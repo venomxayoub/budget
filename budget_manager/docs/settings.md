@@ -1,0 +1,3 @@
+sidebar:
+    - add a sidebar that would open using right, the sidebar opens on the right and overs 85% of the screen horizatoly and 100% verticaky.
+    - in the sidebar we would have two link, one is called entries in which we have our income/expense entry and the other is categories, is the place where we add new categories of both income and expense. same structure as the entries view. two button at the bottom same style same everything, opens in a new view exactly like the income/expense view. 
