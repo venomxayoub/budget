@@ -140,8 +140,14 @@ class TransactionProvider extends ChangeNotifier {
         _incomeCategories = await db.getIncomeCategories();
       }
 
-      _expenses = await db.getExpenses();
-      _incomes = await db.getIncomes();
+      _expenses = [
+        ...await db.getExpenses(),
+        ...await db.getArchivedExpenses(),
+      ];
+      _incomes = [
+        ...await db.getIncomes(),
+        ...await db.getArchivedIncomes(),
+      ];
 
       if (_expenses.isEmpty && _incomes.isEmpty) {
         await seedLargeData();
@@ -261,22 +267,86 @@ class TransactionProvider extends ChangeNotifier {
   }
 
   Future<void> deleteExpense(int id) async {
+    final index = _expenses.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    final now = DateTime.now();
+    _expenses[index] = _expenses[index].copyWith(
+      deletedAt: now,
+      updatedAt: now,
+    );
+    notifyListeners();
+
+    try {
+      final db = DatabaseHelper();
+      await db.softDeleteExpense(id);
+    } catch (_) {}
+  }
+
+  Future<void> deleteIncome(int id) async {
+    final index = _incomes.indexWhere((i) => i.id == id);
+    if (index == -1) return;
+    final now = DateTime.now();
+    _incomes[index] = _incomes[index].copyWith(
+      deletedAt: now,
+      updatedAt: now,
+    );
+    notifyListeners();
+
+    try {
+      final db = DatabaseHelper();
+      await db.softDeleteIncome(id);
+    } catch (_) {}
+  }
+
+  Future<void> restoreExpense(int id) async {
+    final index = _expenses.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    final now = DateTime.now();
+    _expenses[index] = _expenses[index].copyWith(
+      deletedAt: null,
+      updatedAt: now,
+    );
+    notifyListeners();
+
+    try {
+      final db = DatabaseHelper();
+      await db.restoreExpense(id);
+    } catch (_) {}
+  }
+
+  Future<void> restoreIncome(int id) async {
+    final index = _incomes.indexWhere((i) => i.id == id);
+    if (index == -1) return;
+    final now = DateTime.now();
+    _incomes[index] = _incomes[index].copyWith(
+      deletedAt: null,
+      updatedAt: now,
+    );
+    notifyListeners();
+
+    try {
+      final db = DatabaseHelper();
+      await db.restoreIncome(id);
+    } catch (_) {}
+  }
+
+  Future<void> permanentDeleteExpense(int id) async {
     _expenses.removeWhere((e) => e.id == id);
     notifyListeners();
 
     try {
       final db = DatabaseHelper();
-      await db.deleteExpense(id);
+      await db.permanentDeleteExpense(id);
     } catch (_) {}
   }
 
-  Future<void> deleteIncome(int id) async {
+  Future<void> permanentDeleteIncome(int id) async {
     _incomes.removeWhere((i) => i.id == id);
     notifyListeners();
 
     try {
       final db = DatabaseHelper();
-      await db.deleteIncome(id);
+      await db.permanentDeleteIncome(id);
     } catch (_) {}
   }
 

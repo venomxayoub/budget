@@ -101,33 +101,105 @@ class EntryDetailScreen extends StatelessWidget {
               DateFormat('EEEE, MMMM d, yyyy - h:mm a').format(entry.createdAt),
               style: const TextStyle(fontSize: 14),
             ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  final provider = context.read<TransactionProvider>();
-                  if (entry.isExpense) {
-                    provider.deleteExpense(entry.id);
-                  } else {
-                    provider.deleteIncome(entry.id);
-                  }
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                label: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.redAccent),
+            if (entry.deletedAt != null) ...[
+              Text(
+                'Deleted',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurfaceVariant,
                 ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.redAccent),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                DateFormat('EEEE, MMMM d, yyyy - h:mm a').format(entry.deletedAt!),
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+            ],
+            const Spacer(),
+            if (entry.isArchived) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final provider = context.read<TransactionProvider>();
+                    if (entry.isExpense) {
+                      provider.restoreExpense(entry.id);
+                    } else {
+                      provider.restoreIncome(entry.id);
+                    }
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.restore, color: Colors.blue),
+                  label: const Text(
+                    'Restore',
+                    style: TextStyle(color: Colors.blue),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.blue),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final provider = context.read<TransactionProvider>();
+                    if (entry.isExpense) {
+                      provider.permanentDeleteExpense(entry.id);
+                    } else {
+                      provider.permanentDeleteIncome(entry.id);
+                    }
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                  label: const Text(
+                    'Delete Forever',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final provider = context.read<TransactionProvider>();
+                    if (entry.isExpense) {
+                      provider.deleteExpense(entry.id);
+                    } else {
+                      provider.deleteIncome(entry.id);
+                    }
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

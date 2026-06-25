@@ -48,6 +48,12 @@ class Sidebar extends StatelessWidget {
               isActive: activePage == 'categories',
               onTap: () => onPageChanged('categories'),
             ),
+            _NavItem(
+              icon: Icons.archive,
+              label: 'Archive',
+              isActive: activePage == 'archive',
+              onTap: () => onPageChanged('archive'),
+            ),
           ],
         ),
       ),
