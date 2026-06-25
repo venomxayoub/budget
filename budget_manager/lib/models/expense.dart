@@ -7,6 +7,7 @@ class Expense {
   final String note;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? deletedAt;
 
   Expense({
     this.id,
@@ -15,6 +16,7 @@ class Expense {
     required this.note,
     this.createdAt,
     this.updatedAt,
+    this.deletedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -25,6 +27,7 @@ class Expense {
       'note': note,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'deleted_at': deletedAt?.toIso8601String(),
     };
   }
 
@@ -42,6 +45,9 @@ class Expense {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
           : null,
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.parse(map['deleted_at'] as String)
+          : null,
     );
   }
 
@@ -52,6 +58,7 @@ class Expense {
     String? note,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? deletedAt,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -60,6 +67,7 @@ class Expense {
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 }

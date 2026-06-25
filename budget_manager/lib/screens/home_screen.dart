@@ -186,30 +186,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Row(
-                children: [
-                  Text(
-                    dayLabel,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
+            _DayStatusBar(
+              dayLabel: dayLabel,
+              date: date,
+              entries: dayEntries,
             ),
             ...List.generate(dayEntries.length, (i) {
               final entry = dayEntries[i];
@@ -237,5 +217,71 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _DayStatusBar extends StatelessWidget {
+  final String dayLabel;
+  final DateTime date;
+  final List<EntryItem> entries;
+
+  const _DayStatusBar({
+    required this.dayLabel,
+    required this.date,
+    required this.entries,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    double totalExpense = 0;
+    double totalIncome = 0;
+    for (final e in entries) {
+      if (e.isExpense) {
+        totalExpense += e.price;
+      } else {
+        totalIncome += e.price;
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Row(
+        children: [
+          Text(
+            dayLabel,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const Spacer(),
+          if (totalIncome > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Text(
+                '+\$${totalIncome.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+          if (totalExpense > 0)
+            Text(
+              '-\$${totalExpense.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.redAccent,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

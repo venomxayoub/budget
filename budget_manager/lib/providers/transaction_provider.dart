@@ -13,6 +13,7 @@ class EntryItem {
   final String note;
   final List<int> categoryIds;
   final DateTime createdAt;
+  final DateTime? deletedAt;
 
   EntryItem({
     required this.id,
@@ -21,7 +22,10 @@ class EntryItem {
     required this.note,
     required this.categoryIds,
     required this.createdAt,
+    this.deletedAt,
   });
+
+  bool get isArchived => deletedAt != null;
 }
 
 class TransactionProvider extends ChangeNotifier {
@@ -38,25 +42,56 @@ class TransactionProvider extends ChangeNotifier {
   List<EntryItem> get entries {
     final items = <EntryItem>[
       for (final e in _expenses)
-        EntryItem(
-          id: e.id!,
-          isExpense: true,
-          price: e.price,
-          note: e.note,
-          categoryIds: e.categoryIds,
-          createdAt: e.createdAt!,
-        ),
+        if (e.deletedAt == null)
+          EntryItem(
+            id: e.id!,
+            isExpense: true,
+            price: e.price,
+            note: e.note,
+            categoryIds: e.categoryIds,
+            createdAt: e.createdAt!,
+          ),
       for (final i in _incomes)
-        EntryItem(
-          id: i.id!,
-          isExpense: false,
-          price: i.price,
-          note: i.note,
-          categoryIds: i.categoryIds,
-          createdAt: i.createdAt!,
-        ),
+        if (i.deletedAt == null)
+          EntryItem(
+            id: i.id!,
+            isExpense: false,
+            price: i.price,
+            note: i.note,
+            categoryIds: i.categoryIds,
+            createdAt: i.createdAt!,
+          ),
     ];
     items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return items;
+  }
+
+  List<EntryItem> get archivedEntries {
+    final items = <EntryItem>[
+      for (final e in _expenses)
+        if (e.deletedAt != null)
+          EntryItem(
+            id: e.id!,
+            isExpense: true,
+            price: e.price,
+            note: e.note,
+            categoryIds: e.categoryIds,
+            createdAt: e.createdAt!,
+            deletedAt: e.deletedAt,
+          ),
+      for (final i in _incomes)
+        if (i.deletedAt != null)
+          EntryItem(
+            id: i.id!,
+            isExpense: false,
+            price: i.price,
+            note: i.note,
+            categoryIds: i.categoryIds,
+            createdAt: i.createdAt!,
+            deletedAt: i.deletedAt,
+          ),
+    ];
+    items.sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
     return items;
   }
 

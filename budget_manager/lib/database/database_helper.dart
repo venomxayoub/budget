@@ -25,8 +25,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -72,6 +73,13 @@ class DatabaseHelper {
         updated_at TEXT
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE expenses ADD COLUMN deleted_at TEXT');
+      await db.execute('ALTER TABLE incomes ADD COLUMN deleted_at TEXT');
+    }
   }
 
   Future<int> insertExpenseCategory(ExpenseCategory category) async {
@@ -162,7 +170,21 @@ class DatabaseHelper {
 
   Future<List<Expense>> getExpenses() async {
     final db = await database;
-    final maps = await db.query('expenses', orderBy: 'created_at DESC');
+    final maps = await db.query(
+      'expenses',
+      where: 'deleted_at IS NULL',
+      orderBy: 'created_at DESC',
+    );
+    return maps.map((map) => Expense.fromMap(map)).toList();
+  }
+
+  Future<List<Expense>> getArchivedExpenses() async {
+    final db = await database;
+    final maps = await db.query(
+      'expenses',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+    );
     return maps.map((map) => Expense.fromMap(map)).toList();
   }
 
@@ -179,7 +201,35 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> deleteExpense(int id) async {
+  Future<int> softDeleteExpense(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'expenses',
+      {
+        'deleted_at': now,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> restoreExpense(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'expenses',
+      {
+        'deleted_at': null,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> permanentDeleteExpense(int id) async {
     final db = await database;
     return await db.delete(
       'expenses',
@@ -200,7 +250,21 @@ class DatabaseHelper {
 
   Future<List<Income>> getIncomes() async {
     final db = await database;
-    final maps = await db.query('incomes', orderBy: 'created_at DESC');
+    final maps = await db.query(
+      'incomes',
+      where: 'deleted_at IS NULL',
+      orderBy: 'created_at DESC',
+    );
+    return maps.map((map) => Income.fromMap(map)).toList();
+  }
+
+  Future<List<Income>> getArchivedIncomes() async {
+    final db = await database;
+    final maps = await db.query(
+      'incomes',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC',
+    );
     return maps.map((map) => Income.fromMap(map)).toList();
   }
 
@@ -217,7 +281,35 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> deleteIncome(int id) async {
+  Future<int> softDeleteIncome(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'incomes',
+      {
+        'deleted_at': now,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> restoreIncome(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'incomes',
+      {
+        'deleted_at': null,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> permanentDeleteIncome(int id) async {
     final db = await database;
     return await db.delete(
       'incomes',
