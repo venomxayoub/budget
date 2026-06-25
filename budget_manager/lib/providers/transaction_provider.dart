@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
@@ -106,6 +107,10 @@ class TransactionProvider extends ChangeNotifier {
 
       _expenses = await db.getExpenses();
       _incomes = await db.getIncomes();
+
+      if (_expenses.isEmpty && _incomes.isEmpty) {
+        await seedLargeData();
+      }
     } catch (_) {
       if (_expenseCategories.isEmpty) {
         _expenseCategories = defaultExpenseCategories;
@@ -122,6 +127,64 @@ class TransactionProvider extends ChangeNotifier {
     }
     for (final cat in defaultIncomeCategories) {
       await db.insertIncomeCategory(cat);
+    }
+  }
+
+  Future<void> seedLargeData() async {
+    final rng = Random(42);
+    final now = DateTime.now();
+
+    final expenseNotes = [
+      'Grocery shopping', 'Uber ride', 'Netflix subscription', 'Electric bill',
+      'Lunch with team', 'Gas station', 'Amazon order', 'Gym membership',
+      'Coffee & pastry', 'Phone bill', 'Internet bill', 'Movie tickets',
+      'Pizza delivery', 'New sneakers', 'Doctor visit', 'Prescription',
+      'Online course', 'Sushi dinner', 'Bus pass', 'Spotify premium',
+      'Parking fee', 'House cleaning', 'Laundry', 'Office supplies',
+      'Birthday gift', 'Book purchase', 'Streaming service', 'Water bill',
+      'Dental checkup', 'Car wash', 'Taxi', 'Concert tickets',
+      'Bakery', 'Fast food', 'Hardware tools', 'Plant pot',
+      'Yoga class', 'Haircut', 'Pet food', 'Charity donation',
+    ];
+
+    final incomeNotes = [
+      'Monthly salary', 'Freelance project', 'Dividend payment',
+      'Birthday gift from mom', 'Tax refund', 'Bonus payment',
+      'Side gig', 'Consulting fee', 'Interest earned', 'Rental income',
+      'Cashback reward', 'Referral bonus', 'Stock sale', 'Commission',
+    ];
+
+    for (int i = 0; i < 200; i++) {
+      final isExpense = i < 160;
+      final daysAgo = rng.nextInt(90);
+      final hours = rng.nextInt(12) + 8;
+      final minutes = rng.nextInt(60);
+      final date = now.subtract(Duration(days: daysAgo, hours: hours, minutes: minutes));
+
+      if (isExpense) {
+        final price = double.parse((rng.nextDouble() * 200 + 1).toStringAsFixed(2));
+        final note = expenseNotes[rng.nextInt(expenseNotes.length)];
+        final catIds = [rng.nextInt(8) + 1];
+        if (rng.nextBool()) catIds.add(rng.nextInt(8) + 1);
+
+        await addExpense(Expense(
+          price: price,
+          note: note,
+          categoryIds: catIds.toSet().toList(),
+          createdAt: date,
+        ));
+      } else {
+        final price = double.parse((rng.nextDouble() * 5000 + 100).toStringAsFixed(2));
+        final note = incomeNotes[rng.nextInt(incomeNotes.length)];
+        final catIds = [rng.nextInt(5) + 1];
+
+        await addIncome(Income(
+          price: price,
+          note: note,
+          categoryIds: catIds,
+          createdAt: date,
+        ));
+      }
     }
   }
 
