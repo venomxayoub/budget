@@ -17,11 +17,15 @@ class CategoryFormScreen extends StatefulWidget {
 class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _nameController = TextEditingController();
   final _emojiController = TextEditingController();
+  final _nameFocusNode = FocusNode();
+  final _emojiFocusNode = FocusNode();
 
   @override
   void dispose() {
     _nameController.dispose();
     _emojiController.dispose();
+    _nameFocusNode.dispose();
+    _emojiFocusNode.dispose();
     super.dispose();
   }
 
@@ -85,6 +89,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           children: [
             TextField(
               controller: _nameController,
+              focusNode: _nameFocusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Category Name',
                 hintText: 'e.g. Groceries',
@@ -97,10 +104,13 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                 ),
               ),
               style: const TextStyle(fontSize: 18),
+              onSubmitted: (_) => _emojiFocusNode.requestFocus(),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _emojiController,
+              focusNode: _emojiFocusNode,
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: 'Emoji',
                 hintText: 'e.g. 🥦',
@@ -113,6 +123,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                 ),
               ),
               style: const TextStyle(fontSize: 24),
+              onSubmitted: (_) => _submit(),
             ),
           ],
         ),

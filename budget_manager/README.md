@@ -1,16 +1,50 @@
-# budget_manager
+# Budget Manager
 
-A new Flutter project.
+A Flutter expense and income tracking app for Android.
 
-## Getting Started
+## Updating the App
 
-This project is a starting point for a Flutter application.
+When you need to publish a new version:
 
-A few resources to get you started if this is your first Flutter project:
+### 1. Bump the version
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+In `android/app/build.gradle.kts`:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```groovy
+defaultConfig {
+    versionCode = 2  // increment by 1 each release
+    versionName = "1.0.1"  // update as needed
+}
+```
+
+### 2. Rebuild the APK
+
+```bash
+flutter build apk --target-platform android-arm64 --release
+```
+
+The APK is output to `build/app/outputs/flutter-apk/app-release.apk`.
+
+### 3. Publish a GitHub release
+
+```bash
+gh release create v1.0.1 \
+  --title "v1.0.1" \
+  --notes "Release notes here" \
+  build/app/outputs/flutter-apk/app-release.apk
+```
+
+### 4. Install on device
+
+Download the APK from the GitHub release on your Samsung S22 Ultra and open it. Since the APK is signed with the same `keystore.jks`, Android will treat it as an update to the existing install — no data loss.
+
+Your data is also protected by:
+- **Android Auto Backup** — data is automatically backed up to Google Drive
+- **Pre-migration safety** — the app copies your database before any upgrade, and runs migrations atomically
+
+## Development
+
+```bash
+flutter run
+flutter analyze
+```

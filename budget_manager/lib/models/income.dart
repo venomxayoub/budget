@@ -1,5 +1,10 @@
 import 'dart:convert';
 
+class _IncomeSentinel {
+  const _IncomeSentinel();
+}
+const _incomeSentinel = _IncomeSentinel();
+
 class Income {
   final int? id;
   final List<int> categoryIds;
@@ -58,7 +63,7 @@ class Income {
     String? note,
     DateTime? createdAt,
     DateTime? updatedAt,
-    DateTime? deletedAt,
+    Object? deletedAt = _incomeSentinel,
   }) {
     return Income(
       id: id ?? this.id,
@@ -67,7 +72,7 @@ class Income {
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: deletedAt ?? this.deletedAt,
+      deletedAt: identical(deletedAt, _incomeSentinel) ? this.deletedAt : deletedAt as DateTime?,
     );
   }
 }

@@ -150,15 +150,12 @@ class TransactionProvider extends ChangeNotifier {
       ];
 
       if (_expenses.isEmpty && _incomes.isEmpty) {
-        await seedLargeData();
+        // fresh install — no seeding needed
       }
     } catch (_) {
       if (_expenseCategories.isEmpty) {
         _expenseCategories = defaultExpenseCategories;
         _incomeCategories = defaultIncomeCategories;
-      }
-      if (_expenses.isEmpty && _incomes.isEmpty) {
-        await seedLargeData();
       }
     }
 
@@ -398,6 +395,7 @@ final List<ExpenseCategory> defaultExpenseCategories = [
   ExpenseCategory(id: 6, name: 'Health', emoji: '💊'),
   ExpenseCategory(id: 7, name: 'Education', emoji: '📚'),
   ExpenseCategory(id: 8, name: 'Housing', emoji: '🏠'),
+  ExpenseCategory(id: 9, name: 'Other', emoji: '📦'),
 ];
 
 final List<IncomeCategory> defaultIncomeCategories = [
@@ -406,4 +404,5 @@ final List<IncomeCategory> defaultIncomeCategories = [
   IncomeCategory(id: 3, name: 'Investment', emoji: '📈'),
   IncomeCategory(id: 4, name: 'Gift', emoji: '🎁'),
   IncomeCategory(id: 5, name: 'Refund', emoji: '↩️'),
+  IncomeCategory(id: 6, name: 'Other', emoji: '📦'),
 ];

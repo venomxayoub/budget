@@ -12,29 +12,12 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.85,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
-              ),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ),
             const SizedBox(height: 8),
             _NavItem(
               icon: Icons.receipt_long,

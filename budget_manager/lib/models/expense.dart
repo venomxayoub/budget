@@ -1,5 +1,10 @@
 import 'dart:convert';
 
+class _ExpenseSentinel {
+  const _ExpenseSentinel();
+}
+const _expenseSentinel = _ExpenseSentinel();
+
 class Expense {
   final int? id;
   final List<int> categoryIds;
@@ -58,7 +63,7 @@ class Expense {
     String? note,
     DateTime? createdAt,
     DateTime? updatedAt,
-    DateTime? deletedAt,
+    Object? deletedAt = _expenseSentinel,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -67,7 +72,7 @@ class Expense {
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: deletedAt ?? this.deletedAt,
+      deletedAt: identical(deletedAt, _expenseSentinel) ? this.deletedAt : deletedAt as DateTime?,
     );
   }
 }

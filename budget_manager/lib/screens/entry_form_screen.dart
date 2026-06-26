@@ -19,21 +19,30 @@ class EntryFormScreen extends StatefulWidget {
 class _EntryFormScreenState extends State<EntryFormScreen> {
   final _priceController = TextEditingController();
   final _noteController = TextEditingController();
-  final Set<int> _selectedCategoryIds = {};
+  final _selectedCategoryIds = <int>{};
+  final _priceFocusNode = FocusNode();
+  final _noteFocusNode = FocusNode();
 
   @override
   void dispose() {
     _priceController.dispose();
     _noteController.dispose();
+    _priceFocusNode.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
   void _submit() {
-    if (_selectedCategoryIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one category')),
+    final provider = context.read<TransactionProvider>();
+
+    var categoryIds = _selectedCategoryIds.toList();
+    if (categoryIds.isEmpty) {
+      final cats = provider.getCategoriesList(widget.isExpense);
+      final other = cats.cast<dynamic>().firstWhere(
+        (c) => c.name == 'Other',
+        orElse: () => cats.first,
       );
-      return;
+      categoryIds = [other.id as int];
     }
 
     final priceText = _priceController.text.trim();
@@ -52,30 +61,31 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       return;
     }
 
-    final provider = context.read<TransactionProvider>();
-    final now = DateTime.now();
-
     if (widget.isExpense) {
       final expense = Expense(
-        categoryIds: _selectedCategoryIds.toList(),
+        categoryIds: categoryIds,
         price: price,
         note: _noteController.text.trim(),
-        createdAt: now,
-        updatedAt: now,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
       provider.addExpense(expense);
     } else {
       final income = Income(
-        categoryIds: _selectedCategoryIds.toList(),
+        categoryIds: categoryIds,
         price: price,
         note: _noteController.text.trim(),
-        createdAt: now,
-        updatedAt: now,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
       provider.addIncome(income);
     }
 
-    Navigator.pop(context);
+    _priceController.clear();
+    _noteController.clear();
+    _selectedCategoryIds.clear();
+    setState(() {});
+    _priceFocusNode.requestFocus();
   }
 
   @override
@@ -98,7 +108,10 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
           children: [
             TextField(
               controller: _priceController,
+              focusNode: _priceFocusNode,
+              autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textInputAction: TextInputAction.next,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
@@ -123,17 +136,21 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                 fontWeight: FontWeight.w700,
                 color: accentColor,
               ),
+              onSubmitted: (_) => _noteFocusNode.requestFocus(),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _noteController,
+              focusNode: _noteFocusNode,
               maxLines: 2,
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: 'Note (optional)',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 20),
             Text(

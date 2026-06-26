@@ -163,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
           entries: monthEntries,
           onPreviousMonth: () {
             setState(() {
-              _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+              final prev = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+              if (prev.year >= 2026) _selectedMonth = prev;
             });
           },
           onNextMonth: () {
