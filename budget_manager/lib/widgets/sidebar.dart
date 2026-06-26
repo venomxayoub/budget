@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class Sidebar extends StatelessWidget {
   final String activePage;
@@ -37,6 +38,8 @@ class Sidebar extends StatelessWidget {
               isActive: activePage == 'archive',
               onTap: () => onPageChanged('archive'),
             ),
+            const Spacer(),
+            _UpdateButton(),
           ],
         ),
       ),
@@ -84,6 +87,42 @@ class _NavItem extends StatelessWidget {
             )
           : null,
       onTap: onTap,
+    );
+  }
+}
+
+class _UpdateButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    const version = '1.0.3';
+    const downloadUrl = 'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'v$version',
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => launchUrl(Uri.parse(downloadUrl), mode: LaunchMode.externalApplication),
+              icon: Icon(Icons.download, size: 18, color: colorScheme.primary),
+              label: const Text('Update'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
