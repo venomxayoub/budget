@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -5,6 +7,10 @@ import '../models/expense_category.dart';
 import '../models/income_category.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
+
+const _externalDbDir = '/storage/emulated/0/budget_manager';
+const _dbFileName = 'budget_manager.db';
+const _backupFileName = 'budget_manager_backup.db';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -20,8 +26,39 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'budget_manager.db');
+    final String dbPath;
+    final String path;
+
+    if (Platform.isAndroid) {
+      final dir = Directory(_externalDbDir);
+      final canUseExternal = await dir.exists() ||
+          await dir.create(recursive: true).then((_) => true).catchError((_) => false);
+
+      if (canUseExternal) {
+        dbPath = _externalDbDir;
+        path = join(_externalDbDir, _dbFileName);
+
+        final defaultDbPath = await getDatabasesPath();
+        final defaultDb = File(join(defaultDbPath, _dbFileName));
+        if (await defaultDb.exists() && !await File(path).exists()) {
+          await defaultDb.copy(path);
+        }
+      } else {
+        dbPath = await getDatabasesPath();
+        path = join(dbPath, _dbFileName);
+      }
+    } else {
+      dbPath = await getDatabasesPath();
+      path = join(dbPath, _dbFileName);
+    }
+
+    final backupPath = join(dbPath, _backupFileName);
+    final dbFile = File(path);
+    if (await dbFile.exists()) {
+      try {
+        await dbFile.copy(backupPath);
+      } catch (_) {}
+    }
 
     return await openDatabase(
       path,
@@ -76,10 +113,12 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('ALTER TABLE expenses ADD COLUMN deleted_at TEXT');
-      await db.execute('ALTER TABLE incomes ADD COLUMN deleted_at TEXT');
-    }
+    await db.transaction((txn) async {
+      if (oldVersion < 2) {
+        await txn.execute('ALTER TABLE expenses ADD COLUMN deleted_at TEXT');
+        await txn.execute('ALTER TABLE incomes ADD COLUMN deleted_at TEXT');
+      }
+    });
   }
 
   Future<int> insertExpenseCategory(ExpenseCategory category) async {
