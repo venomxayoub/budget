@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Budget Manager app icon</title>
+  <desc id="desc">A clean flat green piggy bank with coin stack and dollar sign on a white background.</desc>
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+
+  <g fill="#4CAF50">
+    <ellipse cx="512" cy="548" rx="286" ry="208"/>
+    <circle cx="745" cy="480" r="70"/>
+    <path d="M769 384l92-64c18-12 42 3 39 25l-17 118c-3 20-28 29-44 16l-73-61z"/>
+    <circle cx="772" cy="462" r="16" fill="#FFFFFF"/>
+    <rect x="342" y="706" width="74" height="118" rx="28"/>
+    <rect x="610" y="706" width="74" height="118" rx="28"/>
+    <circle cx="228" cy="558" r="54"/>
+    <rect x="180" y="524" width="74" height="68" rx="34"/>
+    <rect x="420" y="302" width="184" height="42" rx="21"/>
+  </g>
+
+  <g fill="#4CAF50">
+    <ellipse cx="258" cy="732" rx="112" ry="34"/>
+    <rect x="146" y="646" width="224" height="86"/>
+    <ellipse cx="258" cy="646" rx="112" ry="34"/>
+    <ellipse cx="258" cy="646" rx="72" ry="18" fill="#FFFFFF" opacity="0.35"/>
+  </g>
+
+  <text x="514" y="616" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="190" font-weight="700" fill="#FFFFFF">$</text>
+</svg>
