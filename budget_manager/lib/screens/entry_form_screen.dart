@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
 import '../providers/transaction_provider.dart';
+import '../utils/currency.dart';
 import '../widgets/category_badge.dart';
 
 class EntryFormScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   final _selectedCategoryIds = <int>{};
   final _priceFocusNode = FocusNode();
   final _noteFocusNode = FocusNode();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -32,60 +34,82 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
     final provider = context.read<TransactionProvider>();
-
-    var categoryIds = _selectedCategoryIds.toList();
-    if (categoryIds.isEmpty) {
-      final cats = provider.getCategoriesList(widget.isExpense);
-      final other = cats.cast<dynamic>().firstWhere(
-        (c) => c.name == 'Other',
-        orElse: () => cats.first,
-      );
-      categoryIds = [other.id as int];
-    }
 
     final priceText = _priceController.text.trim();
     if (priceText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a price')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a price')));
       return;
     }
 
-    final price = double.tryParse(priceText);
-    if (price == null || price <= 0) {
+    final amountCents = parseCurrencyToCents(priceText);
+    if (amountCents == null || amountCents <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a valid price')),
       );
       return;
     }
 
-    if (widget.isExpense) {
-      final expense = Expense(
-        categoryIds: categoryIds,
-        price: price,
-        note: _noteController.text.trim(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+    var categoryIds = _selectedCategoryIds.toList();
+    if (categoryIds.isEmpty) {
+      final categories = provider.getCategoriesList(widget.isExpense);
+      if (categories.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Add a category before creating an entry'),
+          ),
+        );
+        return;
+      }
+      final other = categories.cast<dynamic>().firstWhere(
+        (category) => category.name == 'Other',
+        orElse: () => categories.first,
       );
-      provider.addExpense(expense);
-    } else {
-      final income = Income(
-        categoryIds: categoryIds,
-        price: price,
-        note: _noteController.text.trim(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      provider.addIncome(income);
+      categoryIds = [other.id as int];
     }
 
-    _priceController.clear();
-    _noteController.clear();
-    _selectedCategoryIds.clear();
-    setState(() {});
-    _priceFocusNode.requestFocus();
+    setState(() => _isSubmitting = true);
+    try {
+      final now = DateTime.now();
+      if (widget.isExpense) {
+        await provider.addExpense(
+          Expense(
+            categoryIds: categoryIds,
+            amountCents: amountCents,
+            note: _noteController.text.trim(),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      } else {
+        await provider.addIncome(
+          Income(
+            categoryIds: categoryIds,
+            amountCents: amountCents,
+            note: _noteController.text.trim(),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      _priceController.clear();
+      _noteController.clear();
+      _selectedCategoryIds.clear();
+      setState(() => _isSubmitting = false);
+      _priceFocusNode.requestFocus();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save entry: $error')));
+    }
   }
 
   @override
@@ -110,7 +134,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
               controller: _priceController,
               focusNode: _priceFocusNode,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               textInputAction: TextInputAction.next,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
@@ -165,23 +191,24 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: categories.map((cat) {
-                final selected = _selectedCategoryIds.contains(cat.id);
-                return CategoryBadge(
-                  emoji: cat.emoji,
-                  name: cat.name,
-                  isSelected: selected,
-                  onTap: () {
-                    setState(() {
-                      if (selected) {
-                        _selectedCategoryIds.remove(cat.id);
-                      } else {
-                        _selectedCategoryIds.add(cat.id!);
-                      }
-                    });
-                  },
-                );
-              }).toList(),
+              children:
+                  categories.map((cat) {
+                    final selected = _selectedCategoryIds.contains(cat.id);
+                    return CategoryBadge(
+                      emoji: cat.emoji,
+                      name: cat.name,
+                      isSelected: selected,
+                      onTap: () {
+                        setState(() {
+                          if (selected) {
+                            _selectedCategoryIds.remove(cat.id);
+                          } else {
+                            _selectedCategoryIds.add(cat.id!);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
             ),
           ],
         ),
@@ -206,7 +233,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: _submit,
+                  onPressed: _isSubmitting ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: accentColor,
                     padding: const EdgeInsets.symmetric(vertical: 14),

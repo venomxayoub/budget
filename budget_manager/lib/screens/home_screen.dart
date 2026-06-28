@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/transaction_provider.dart';
+import '../database/database_helper.dart';
+import '../utils/currency.dart';
 import '../widgets/entry_tile.dart';
 import '../widgets/sidebar.dart';
 import 'entry_form_screen.dart';
@@ -19,7 +22,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _activePage = 'entries';
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _selectedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    1,
+  );
 
   bool get _isCurrentMonth {
     final now = DateTime.now();
@@ -38,17 +45,21 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _activePage = page);
           Navigator.pop(context);
         },
+        onImportDatabase: () async {
+          Navigator.pop(context);
+          await _importPreviousData();
+        },
       ),
       body: Stack(
         children: [
           _activePage == 'entries'
               ? _buildEntriesView()
               : _activePage == 'archive'
-                  ? _buildArchiveView()
-                  : CategoriesScreen(
-                      onAddExpenseCategory: () => _openCategoryForm(context, true),
-                      onAddIncomeCategory: () => _openCategoryForm(context, false),
-                    ),
+              ? _buildArchiveView()
+              : CategoriesScreen(
+                onAddExpenseCategory: () => _openCategoryForm(context, true),
+                onAddIncomeCategory: () => _openCategoryForm(context, false),
+              ),
           Positioned(
             top: 12,
             left: 12,
@@ -72,58 +83,86 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: _activePage == 'entries'
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton(
-                  heroTag: 'expense_fab',
-                  mini: true,
-                  backgroundColor: Colors.redAccent,
-                  onPressed: () => _openEntryForm(context, true),
-                  child: const Icon(Icons.add, color: Colors.white),
-                ),
-                const SizedBox(height: 8),
-                FloatingActionButton(
-                  heroTag: 'income_fab',
-                  mini: true,
-                  backgroundColor: Colors.green,
-                  onPressed: () => _openEntryForm(context, false),
-                  child: const Icon(Icons.add, color: Colors.white),
-                ),
-              ],
-            )
-          : _activePage == 'archive'
+      floatingActionButton:
+          _activePage == 'entries'
+              ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'expense_fab',
+                    mini: true,
+                    backgroundColor: Colors.redAccent,
+                    onPressed: () => _openEntryForm(context, true),
+                    child: const Icon(Icons.add, color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton(
+                    heroTag: 'income_fab',
+                    mini: true,
+                    backgroundColor: Colors.green,
+                    onPressed: () => _openEntryForm(context, false),
+                    child: const Icon(Icons.add, color: Colors.white),
+                  ),
+                ],
+              )
+              : _activePage == 'archive'
               ? null
               : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FloatingActionButton(
-                      heroTag: 'expense_cat_fab',
-                      mini: true,
-                      backgroundColor: Colors.redAccent,
-                      onPressed: () => _openCategoryForm(context, true),
-                      child: const Icon(Icons.add, color: Colors.white),
-                    ),
-                    const SizedBox(height: 8),
-                    FloatingActionButton(
-                      heroTag: 'income_cat_fab',
-                      mini: true,
-                      backgroundColor: Colors.green,
-                      onPressed: () => _openCategoryForm(context, false),
-                      child: const Icon(Icons.add, color: Colors.white),
-                    ),
-                  ],
-                ),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'expense_cat_fab',
+                    mini: true,
+                    backgroundColor: Colors.redAccent,
+                    onPressed: () => _openCategoryForm(context, true),
+                    child: const Icon(Icons.add, color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton(
+                    heroTag: 'income_cat_fab',
+                    mini: true,
+                    backgroundColor: Colors.green,
+                    onPressed: () => _openCategoryForm(context, false),
+                    child: const Icon(Icons.add, color: Colors.white),
+                  ),
+                ],
+              ),
     );
+  }
+
+  Future<void> _importPreviousData() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['db'],
+        withData: true,
+      );
+      if (result == null || !mounted) return;
+
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        throw StateError('The selected database could not be read.');
+      }
+
+      await DatabaseHelper().importDatabase(bytes);
+      if (!mounted) return;
+      await context.read<TransactionProvider>().loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Previous data imported successfully')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not import data: $error')));
+    }
   }
 
   void _openEntryForm(BuildContext context, bool isExpense) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => EntryFormScreen(isExpense: isExpense),
-      ),
+      MaterialPageRoute(builder: (_) => EntryFormScreen(isExpense: isExpense)),
     );
   }
 
@@ -142,10 +181,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final expenseCatMap = provider.expenseCategoryMap;
     final incomeCatMap = provider.incomeCategoryMap;
 
-    final monthEntries = allEntries.where((e) {
-      return e.createdAt.year == _selectedMonth.year &&
-          e.createdAt.month == _selectedMonth.month;
-    }).toList();
+    final monthEntries =
+        allEntries.where((e) {
+          return e.createdAt.year == _selectedMonth.year &&
+              e.createdAt.month == _selectedMonth.month;
+        }).toList();
 
     final groupedEntries = <String, List<EntryItem>>{};
     for (final entry in monthEntries) {
@@ -153,7 +193,8 @@ class _HomeScreenState extends State<HomeScreen> {
       groupedEntries.putIfAbsent(key, () => []).add(entry);
     }
 
-    final sortedDays = groupedEntries.keys.toList()..sort((a, b) => b.compareTo(a));
+    final sortedDays =
+        groupedEntries.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Column(
       children: [
@@ -163,75 +204,90 @@ class _HomeScreenState extends State<HomeScreen> {
           entries: monthEntries,
           onPreviousMonth: () {
             setState(() {
-              final prev = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
-              if (prev.year >= 2026) _selectedMonth = prev;
+              _selectedMonth = DateTime(
+                _selectedMonth.year,
+                _selectedMonth.month - 1,
+                1,
+              );
             });
           },
           onNextMonth: () {
             if (!_isCurrentMonth) {
               setState(() {
-                _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
+                _selectedMonth = DateTime(
+                  _selectedMonth.year,
+                  _selectedMonth.month + 1,
+                  1,
+                );
               });
             }
           },
         ),
         Expanded(
-          child: allEntries.isEmpty
-              ? _emptyState('No entries yet', 'Tap + to add an expense or income')
-              : monthEntries.isEmpty
+          child:
+              allEntries.isEmpty
                   ? _emptyState(
-                      'No entries in ${DateFormat('MMMM yyyy').format(_selectedMonth)}',
-                      'Switch to a different month or add new entries',
-                    )
+                    'No entries yet',
+                    'Tap + to add an expense or income',
+                  )
+                  : monthEntries.isEmpty
+                  ? _emptyState(
+                    'No entries in ${DateFormat('MMMM yyyy').format(_selectedMonth)}',
+                    'Switch to a different month or add new entries',
+                  )
                   : ListView.builder(
-                      itemCount: sortedDays.length,
-                      itemBuilder: (context, dayIndex) {
-                        final day = sortedDays[dayIndex];
-                        final dayEntries = groupedEntries[day]!;
-                        final date = DateTime.parse(day);
-                        final isToday = _isSameDay(date, DateTime.now());
-                        final isYesterday = _isSameDay(
-                            date, DateTime.now().subtract(const Duration(days: 1)));
+                    itemCount: sortedDays.length,
+                    itemBuilder: (context, dayIndex) {
+                      final day = sortedDays[dayIndex];
+                      final dayEntries = groupedEntries[day]!;
+                      final date = DateTime.parse(day);
+                      final isToday = _isSameDay(date, DateTime.now());
+                      final isYesterday = _isSameDay(
+                        date,
+                        DateTime.now().subtract(const Duration(days: 1)),
+                      );
 
-                        String dayLabel;
-                        if (isToday) {
-                          dayLabel = 'Today';
-                        } else if (isYesterday) {
-                          dayLabel = 'Yesterday';
-                        } else {
-                          dayLabel = DateFormat('EEEE, MMM d').format(date);
-                        }
+                      String dayLabel;
+                      if (isToday) {
+                        dayLabel = 'Today';
+                      } else if (isYesterday) {
+                        dayLabel = 'Yesterday';
+                      } else {
+                        dayLabel = DateFormat('EEEE, MMM d').format(date);
+                      }
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _DayStatusBar(
-                              dayLabel: dayLabel,
-                              date: date,
-                              entries: dayEntries,
-                            ),
-                            ...List.generate(dayEntries.length, (i) {
-                              final entry = dayEntries[i];
-                              final catMap = entry.isExpense ? expenseCatMap : incomeCatMap;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _DayStatusBar(
+                            dayLabel: dayLabel,
+                            date: date,
+                            entries: dayEntries,
+                          ),
+                          ...List.generate(dayEntries.length, (i) {
+                            final entry = dayEntries[i];
+                            final catMap =
+                                entry.isExpense ? expenseCatMap : incomeCatMap;
 
-                              return EntryTile(
-                                entry: entry,
-                                categoryMap: catMap,
-                                isOdd: i.isOdd,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EntryDetailScreen(entry: entry),
-                                    ),
-                                  );
-                                },
-                              );
-                            }),
-                          ],
-                        );
-                      },
-                    ),
+                            return EntryTile(
+                              entry: entry,
+                              categoryMap: catMap,
+                              isOdd: i.isOdd,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => EntryDetailScreen(entry: entry),
+                                  ),
+                                );
+                              },
+                            );
+                          }),
+                        ],
+                      );
+                    },
+                  ),
         ),
       ],
     );
@@ -242,14 +298,17 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.account_balance_wallet_outlined,
-              size: 64, color: Theme.of(context).colorScheme.outline),
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 64,
+            color: Theme.of(context).colorScheme.outline,
+          ),
           const SizedBox(height: 16),
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
+              color: Theme.of(context).colorScheme.outline,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -277,21 +336,25 @@ class _HomeScreenState extends State<HomeScreen> {
       groupedEntries.putIfAbsent(key, () => []).add(entry);
     }
 
-    final sortedDays = groupedEntries.keys.toList()..sort((a, b) => b.compareTo(a));
+    final sortedDays =
+        groupedEntries.keys.toList()..sort((a, b) => b.compareTo(a));
 
     if (entries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.archive_outlined,
-                size: 64, color: Theme.of(context).colorScheme.outline),
+            Icon(
+              Icons.archive_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
             const SizedBox(height: 16),
             Text(
               'No archived entries',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
+                color: Theme.of(context).colorScheme.outline,
+              ),
             ),
           ],
         ),
@@ -305,8 +368,10 @@ class _HomeScreenState extends State<HomeScreen> {
         final dayEntries = groupedEntries[day]!;
         final date = DateTime.parse(day);
         final isToday = _isSameDay(date, DateTime.now());
-        final isYesterday =
-            _isSameDay(date, DateTime.now().subtract(const Duration(days: 1)));
+        final isYesterday = _isSameDay(
+          date,
+          DateTime.now().subtract(const Duration(days: 1)),
+        );
 
         String dayLabel;
         if (isToday) {
@@ -320,11 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _DayStatusBar(
-              dayLabel: dayLabel,
-              date: date,
-              entries: dayEntries,
-            ),
+            _DayStatusBar(dayLabel: dayLabel, date: date, entries: dayEntries),
             ...List.generate(dayEntries.length, (i) {
               final entry = dayEntries[i];
               final catMap = entry.isExpense ? expenseCatMap : incomeCatMap;
@@ -369,22 +430,27 @@ class _MonthHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    double totalExpense = 0;
-    double totalIncome = 0;
+    var totalExpense = 0;
+    var totalIncome = 0;
     for (final e in entries) {
       if (e.isExpense) {
-        totalExpense += e.price;
+        totalExpense += e.amountCents;
       } else {
-        totalIncome += e.price;
+        totalIncome += e.amountCents;
       }
     }
 
     return Container(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 4, bottom: 4),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 4,
+        bottom: 4,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
         ),
       ),
       child: Row(
@@ -398,10 +464,7 @@ class _MonthHeader extends StatelessWidget {
             child: Text(
               DateFormat('MMMM yyyy').format(selectedMonth),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
           IconButton(
@@ -416,7 +479,7 @@ class _MonthHeader extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Text(
-                '+\$${totalIncome.toStringAsFixed(0)}',
+                '+${formatCurrency(totalIncome)}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -428,7 +491,7 @@ class _MonthHeader extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Text(
-                '-\$${totalExpense.toStringAsFixed(0)}',
+                '-${formatCurrency(totalExpense)}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -458,13 +521,13 @@ class _DayStatusBar extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    double totalExpense = 0;
-    double totalIncome = 0;
+    var totalExpense = 0;
+    var totalIncome = 0;
     for (final e in entries) {
       if (e.isExpense) {
-        totalExpense += e.price;
+        totalExpense += e.amountCents;
       } else {
-        totalIncome += e.price;
+        totalIncome += e.amountCents;
       }
     }
 
@@ -485,7 +548,7 @@ class _DayStatusBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: 10),
               child: Text(
-                '+\$${totalIncome.toStringAsFixed(0)}',
+                '+${formatCurrency(totalIncome)}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -495,7 +558,7 @@ class _DayStatusBar extends StatelessWidget {
             ),
           if (totalExpense > 0)
             Text(
-              '-\$${totalExpense.toStringAsFixed(0)}',
+              '-${formatCurrency(totalExpense)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

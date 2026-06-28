@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
@@ -9,7 +8,7 @@ import '../database/database_helper.dart';
 class EntryItem {
   final int id;
   final bool isExpense;
-  final double price;
+  final int amountCents;
   final String note;
   final List<int> categoryIds;
   final DateTime createdAt;
@@ -18,7 +17,7 @@ class EntryItem {
   EntryItem({
     required this.id,
     required this.isExpense,
-    required this.price,
+    required this.amountCents,
     required this.note,
     required this.categoryIds,
     required this.createdAt,
@@ -29,6 +28,10 @@ class EntryItem {
 }
 
 class TransactionProvider extends ChangeNotifier {
+  TransactionProvider({DatabaseHelper? databaseHelper})
+    : _databaseHelper = databaseHelper ?? DatabaseHelper();
+
+  final DatabaseHelper _databaseHelper;
   List<Expense> _expenses = [];
   List<Income> _incomes = [];
   List<ExpenseCategory> _expenseCategories = [];
@@ -36,8 +39,10 @@ class TransactionProvider extends ChangeNotifier {
 
   List<Expense> get expenses => List.unmodifiable(_expenses);
   List<Income> get incomes => List.unmodifiable(_incomes);
-  List<ExpenseCategory> get expenseCategories => List.unmodifiable(_expenseCategories);
-  List<IncomeCategory> get incomeCategories => List.unmodifiable(_incomeCategories);
+  List<ExpenseCategory> get expenseCategories =>
+      List.unmodifiable(_expenseCategories);
+  List<IncomeCategory> get incomeCategories =>
+      List.unmodifiable(_incomeCategories);
 
   List<EntryItem> get entries {
     final items = <EntryItem>[
@@ -46,7 +51,7 @@ class TransactionProvider extends ChangeNotifier {
           EntryItem(
             id: e.id!,
             isExpense: true,
-            price: e.price,
+            amountCents: e.amountCents,
             note: e.note,
             categoryIds: e.categoryIds,
             createdAt: e.createdAt!,
@@ -56,7 +61,7 @@ class TransactionProvider extends ChangeNotifier {
           EntryItem(
             id: i.id!,
             isExpense: false,
-            price: i.price,
+            amountCents: i.amountCents,
             note: i.note,
             categoryIds: i.categoryIds,
             createdAt: i.createdAt!,
@@ -73,7 +78,7 @@ class TransactionProvider extends ChangeNotifier {
           EntryItem(
             id: e.id!,
             isExpense: true,
-            price: e.price,
+            amountCents: e.amountCents,
             note: e.note,
             categoryIds: e.categoryIds,
             createdAt: e.createdAt!,
@@ -84,7 +89,7 @@ class TransactionProvider extends ChangeNotifier {
           EntryItem(
             id: i.id!,
             isExpense: false,
-            price: i.price,
+            amountCents: i.amountCents,
             note: i.note,
             categoryIds: i.categoryIds,
             createdAt: i.createdAt!,
@@ -111,11 +116,15 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  Map<int, ExpenseCategory> get expenseCategoryMap =>
-      {for (final c in _expenseCategories) if (c.id != null) c.id!: c};
+  Map<int, ExpenseCategory> get expenseCategoryMap => {
+    for (final c in _expenseCategories)
+      if (c.id != null) c.id!: c,
+  };
 
-  Map<int, IncomeCategory> get incomeCategoryMap =>
-      {for (final c in _incomeCategories) if (c.id != null) c.id!: c};
+  Map<int, IncomeCategory> get incomeCategoryMap => {
+    for (final c in _incomeCategories)
+      if (c.id != null) c.id!: c,
+  };
 
   Map<int, dynamic> getCategoryMap(bool isExpense) =>
       isExpense ? expenseCategoryMap : incomeCategoryMap;
@@ -126,263 +135,166 @@ class TransactionProvider extends ChangeNotifier {
           .toList();
 
   Future<void> loadData() async {
-    _expenseCategories = defaultExpenseCategories;
-    _incomeCategories = defaultIncomeCategories;
+    _expenseCategories = List.of(defaultExpenseCategories);
+    _incomeCategories = List.of(defaultIncomeCategories);
 
     try {
-      final db = DatabaseHelper();
-      _expenseCategories = await db.getExpenseCategories();
-      _incomeCategories = await db.getIncomeCategories();
+      _expenseCategories = await _databaseHelper.getExpenseCategories();
+      _incomeCategories = await _databaseHelper.getIncomeCategories();
 
-      if (_expenseCategories.isEmpty) {
-        await _seedCategories(db);
-        _expenseCategories = await db.getExpenseCategories();
-        _incomeCategories = await db.getIncomeCategories();
+      if (_expenseCategories.isEmpty || _incomeCategories.isEmpty) {
+        await _seedMissingCategories();
+        _expenseCategories = await _databaseHelper.getExpenseCategories();
+        _incomeCategories = await _databaseHelper.getIncomeCategories();
       }
 
       _expenses = [
-        ...await db.getExpenses(),
-        ...await db.getArchivedExpenses(),
+        ...await _databaseHelper.getExpenses(),
+        ...await _databaseHelper.getArchivedExpenses(),
       ];
       _incomes = [
-        ...await db.getIncomes(),
-        ...await db.getArchivedIncomes(),
+        ...await _databaseHelper.getIncomes(),
+        ...await _databaseHelper.getArchivedIncomes(),
       ];
-
-      if (_expenses.isEmpty && _incomes.isEmpty) {
-        // fresh install — no seeding needed
-      }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'budget manager persistence',
+          context: ErrorDescription('while loading saved budget data'),
+        ),
+      );
       if (_expenseCategories.isEmpty) {
-        _expenseCategories = defaultExpenseCategories;
-        _incomeCategories = defaultIncomeCategories;
+        _expenseCategories = List.of(defaultExpenseCategories);
+      }
+      if (_incomeCategories.isEmpty) {
+        _incomeCategories = List.of(defaultIncomeCategories);
       }
     }
 
     notifyListeners();
   }
 
-  Future<void> _seedCategories(DatabaseHelper db) async {
-    for (final cat in defaultExpenseCategories) {
-      await db.insertExpenseCategory(cat);
+  Future<void> _seedMissingCategories() async {
+    if (_expenseCategories.isEmpty) {
+      for (final cat in defaultExpenseCategories) {
+        await _databaseHelper.insertExpenseCategory(cat);
+      }
     }
-    for (final cat in defaultIncomeCategories) {
-      await db.insertIncomeCategory(cat);
-    }
-  }
-
-  Future<void> seedLargeData() async {
-    final rng = Random(42);
-    final now = DateTime.now();
-
-    final expenseNotes = [
-      'Grocery shopping', 'Uber ride', 'Netflix subscription', 'Electric bill',
-      'Lunch with team', 'Gas station', 'Amazon order', 'Gym membership',
-      'Coffee & pastry', 'Phone bill', 'Internet bill', 'Movie tickets',
-      'Pizza delivery', 'New sneakers', 'Doctor visit', 'Prescription',
-      'Online course', 'Sushi dinner', 'Bus pass', 'Spotify premium',
-      'Parking fee', 'House cleaning', 'Laundry', 'Office supplies',
-      'Birthday gift', 'Book purchase', 'Streaming service', 'Water bill',
-      'Dental checkup', 'Car wash', 'Taxi', 'Concert tickets',
-      'Bakery', 'Fast food', 'Hardware tools', 'Plant pot',
-      'Yoga class', 'Haircut', 'Pet food', 'Charity donation',
-    ];
-
-    final incomeNotes = [
-      'Monthly salary', 'Freelance project', 'Dividend payment',
-      'Birthday gift from mom', 'Tax refund', 'Bonus payment',
-      'Side gig', 'Consulting fee', 'Interest earned', 'Rental income',
-      'Cashback reward', 'Referral bonus', 'Stock sale', 'Commission',
-    ];
-
-    for (int i = 0; i < 200; i++) {
-      final isExpense = i < 160;
-      final daysAgo = rng.nextInt(90);
-      final hours = rng.nextInt(12) + 8;
-      final minutes = rng.nextInt(60);
-      final date = now.subtract(Duration(days: daysAgo, hours: hours, minutes: minutes));
-
-      if (isExpense) {
-        final price = double.parse((rng.nextDouble() * 200 + 1).toStringAsFixed(2));
-        final note = expenseNotes[rng.nextInt(expenseNotes.length)];
-        final catIds = [rng.nextInt(8) + 1];
-        if (rng.nextBool()) catIds.add(rng.nextInt(8) + 1);
-
-        await addExpense(Expense(
-          price: price,
-          note: note,
-          categoryIds: catIds.toSet().toList(),
-          createdAt: date,
-        ));
-      } else {
-        final price = double.parse((rng.nextDouble() * 5000 + 100).toStringAsFixed(2));
-        final note = incomeNotes[rng.nextInt(incomeNotes.length)];
-        final catIds = [rng.nextInt(5) + 1];
-
-        await addIncome(Income(
-          price: price,
-          note: note,
-          categoryIds: catIds,
-          createdAt: date,
-        ));
+    if (_incomeCategories.isEmpty) {
+      for (final cat in defaultIncomeCategories) {
+        await _databaseHelper.insertIncomeCategory(cat);
       }
     }
   }
-
-  int _nextExpenseId = 1000;
-  int _nextIncomeId = 1000;
 
   Future<void> addExpense(Expense expense) async {
-    final e = expense.id != null
-        ? expense
-        : expense.copyWith(
-            id: _nextExpenseId++,
-            createdAt: expense.createdAt ?? DateTime.now(),
-            updatedAt: expense.updatedAt ?? DateTime.now(),
-          );
-    _expenses.insert(0, e);
+    final now = DateTime.now();
+    final pending = expense.copyWith(
+      createdAt: expense.createdAt ?? now,
+      updatedAt: expense.updatedAt ?? now,
+    );
+    final id = await _databaseHelper.insertExpense(pending);
+    _expenses.insert(0, pending.copyWith(id: id));
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.insertExpense(e);
-    } catch (_) {}
   }
 
   Future<void> addIncome(Income income) async {
-    final inc = income.id != null
-        ? income
-        : income.copyWith(
-            id: _nextIncomeId++,
-            createdAt: income.createdAt ?? DateTime.now(),
-            updatedAt: income.updatedAt ?? DateTime.now(),
-          );
-    _incomes.insert(0, inc);
+    final now = DateTime.now();
+    final pending = income.copyWith(
+      createdAt: income.createdAt ?? now,
+      updatedAt: income.updatedAt ?? now,
+    );
+    final id = await _databaseHelper.insertIncome(pending);
+    _incomes.insert(0, pending.copyWith(id: id));
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.insertIncome(inc);
-    } catch (_) {}
   }
 
   Future<void> deleteExpense(int id) async {
     final index = _expenses.indexWhere((e) => e.id == id);
     if (index == -1) return;
     final now = DateTime.now();
+    _requireUpdated(await _databaseHelper.softDeleteExpense(id));
     _expenses[index] = _expenses[index].copyWith(
       deletedAt: now,
       updatedAt: now,
     );
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.softDeleteExpense(id);
-    } catch (_) {}
   }
 
   Future<void> deleteIncome(int id) async {
     final index = _incomes.indexWhere((i) => i.id == id);
     if (index == -1) return;
     final now = DateTime.now();
-    _incomes[index] = _incomes[index].copyWith(
-      deletedAt: now,
-      updatedAt: now,
-    );
+    _requireUpdated(await _databaseHelper.softDeleteIncome(id));
+    _incomes[index] = _incomes[index].copyWith(deletedAt: now, updatedAt: now);
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.softDeleteIncome(id);
-    } catch (_) {}
   }
 
   Future<void> restoreExpense(int id) async {
     final index = _expenses.indexWhere((e) => e.id == id);
     if (index == -1) return;
     final now = DateTime.now();
+    _requireUpdated(await _databaseHelper.restoreExpense(id));
     _expenses[index] = _expenses[index].copyWith(
       deletedAt: null,
       updatedAt: now,
     );
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.restoreExpense(id);
-    } catch (_) {}
   }
 
   Future<void> restoreIncome(int id) async {
     final index = _incomes.indexWhere((i) => i.id == id);
     if (index == -1) return;
     final now = DateTime.now();
-    _incomes[index] = _incomes[index].copyWith(
-      deletedAt: null,
-      updatedAt: now,
-    );
+    _requireUpdated(await _databaseHelper.restoreIncome(id));
+    _incomes[index] = _incomes[index].copyWith(deletedAt: null, updatedAt: now);
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.restoreIncome(id);
-    } catch (_) {}
   }
 
   Future<void> permanentDeleteExpense(int id) async {
+    _requireUpdated(await _databaseHelper.permanentDeleteExpense(id));
     _expenses.removeWhere((e) => e.id == id);
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.permanentDeleteExpense(id);
-    } catch (_) {}
   }
 
   Future<void> permanentDeleteIncome(int id) async {
+    _requireUpdated(await _databaseHelper.permanentDeleteIncome(id));
     _incomes.removeWhere((i) => i.id == id);
     notifyListeners();
-
-    try {
-      final db = DatabaseHelper();
-      await db.permanentDeleteIncome(id);
-    } catch (_) {}
   }
 
-  int _nextExpenseCategoryId = 100;
-  int _nextIncomeCategoryId = 100;
-
-  void addExpenseCategory(ExpenseCategory category) {
-    final cat = category.id != null
-        ? category
-        : category.copyWith(
-            id: _nextExpenseCategoryId++,
-            createdAt: category.createdAt ?? DateTime.now(),
-            updatedAt: category.updatedAt ?? DateTime.now(),
-          );
+  Future<void> addExpenseCategory(ExpenseCategory category) async {
+    final now = DateTime.now();
+    final pending = category.copyWith(
+      createdAt: category.createdAt ?? now,
+      updatedAt: category.updatedAt ?? now,
+    );
+    final id = await _databaseHelper.insertExpenseCategory(pending);
+    final cat = pending.copyWith(id: id);
     _expenseCategories.add(cat);
+    _expenseCategories.sort((a, b) => a.name.compareTo(b.name));
     notifyListeners();
-
-    try {
-      DatabaseHelper().insertExpenseCategory(cat);
-    } catch (_) {}
   }
 
-  void addIncomeCategory(IncomeCategory category) {
-    final cat = category.id != null
-        ? category
-        : category.copyWith(
-            id: _nextIncomeCategoryId++,
-            createdAt: category.createdAt ?? DateTime.now(),
-            updatedAt: category.updatedAt ?? DateTime.now(),
-          );
+  Future<void> addIncomeCategory(IncomeCategory category) async {
+    final now = DateTime.now();
+    final pending = category.copyWith(
+      createdAt: category.createdAt ?? now,
+      updatedAt: category.updatedAt ?? now,
+    );
+    final id = await _databaseHelper.insertIncomeCategory(pending);
+    final cat = pending.copyWith(id: id);
     _incomeCategories.add(cat);
+    _incomeCategories.sort((a, b) => a.name.compareTo(b.name));
     notifyListeners();
+  }
 
-    try {
-      DatabaseHelper().insertIncomeCategory(cat);
-    } catch (_) {}
+  void _requireUpdated(int affectedRows) {
+    if (affectedRows != 1) {
+      throw StateError('The saved entry no longer exists.');
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/transaction_provider.dart';
+import '../utils/currency.dart';
 
 class EntryTile extends StatelessWidget {
   final EntryItem entry;
@@ -21,16 +22,15 @@ class EntryTile extends StatelessWidget {
     final borderColor = entry.isExpense ? Colors.redAccent : Colors.green;
 
     return Material(
-      color: isOdd
-          ? colorScheme.surfaceContainerLow.withValues(alpha: 0.3)
-          : Colors.transparent,
+      color:
+          isOdd
+              ? colorScheme.surfaceContainerLow.withValues(alpha: 0.3)
+              : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            border: Border(
-              right: BorderSide(color: borderColor, width: 3),
-            ),
+            border: Border(right: BorderSide(color: borderColor, width: 3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Column(
@@ -55,28 +55,31 @@ class EntryTile extends StatelessWidget {
                     child: Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: entry.categoryIds.map((id) {
-                        final cat = categoryMap[id];
-                        if (cat == null) return const SizedBox.shrink();
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${cat.emoji} ${cat.name}',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        );
-                      }).toList(),
+                      children:
+                          entry.categoryIds.map((id) {
+                            final cat = categoryMap[id];
+                            if (cat == null) return const SizedBox.shrink();
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${cat.emoji} ${cat.name}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            );
+                          }).toList(),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${entry.isExpense ? '-' : '+'}\$${entry.price.toStringAsFixed(2)}',
+                    '${entry.isExpense ? '-' : '+'}${formatCurrency(entry.amountCents)}',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
