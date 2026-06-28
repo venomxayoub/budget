@@ -32,7 +32,7 @@ void main() {
     await helper.close();
   });
 
-  test('version 2 database is repaired and money is migrated', () async {
+  test('version 2 database is rebuilt and remains writable', () async {
     final legacy = await databaseFactoryFfi.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
@@ -72,9 +72,49 @@ void main() {
 
     final helper = _testHelper(databasePath);
     final expenses = await helper.getExpenses();
+    final insertedId = await helper.insertExpense(_expense('After migration'));
+    final columns = await (await helper.database).rawQuery(
+      'PRAGMA table_info(expenses)',
+    );
+    final columnNames = columns.map((column) => column['name']).toSet();
 
     expect(expenses.single.amountCents, 1234);
     expect(expenses.single.deletedAt, isNull);
+    expect(insertedId, greaterThan(expenses.single.id!));
+    expect(columnNames, isNot(contains('price')));
+    await helper.close();
+  });
+
+  test('version 3 database with legacy price constraint is repaired', () async {
+    final legacy = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 3,
+        onCreate: (database, _) async {
+          await _createVersion3EntryTable(database, 'expenses');
+          await _createVersion3EntryTable(database, 'incomes');
+          await database.insert('expenses', {
+            'category_ids': '[1]',
+            'price': 12.34,
+            'price_cents': 1234,
+            'note': 'Version 3 expense',
+            'created_at': DateTime(2025).toIso8601String(),
+            'updated_at': DateTime(2025).toIso8601String(),
+          });
+        },
+      ),
+    );
+    await legacy.close();
+
+    final helper = _testHelper(databasePath);
+    await helper.insertExpense(_expense('Writable after v4 migration'));
+    final expenses = await helper.getExpenses();
+    final columns = await (await helper.database).rawQuery(
+      'PRAGMA table_info(expenses)',
+    );
+
+    expect(expenses, hasLength(2));
+    expect(columns.map((column) => column['name']), isNot(contains('price')));
     await helper.close();
   });
 
@@ -106,3 +146,17 @@ Expense _expense(String note) => Expense(
   createdAt: DateTime(2026),
   updatedAt: DateTime(2026),
 );
+
+Future<void> _createVersion3EntryTable(Database database, String table) =>
+    database.execute('''
+  CREATE TABLE $table (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_ids TEXT NOT NULL,
+    price REAL NOT NULL,
+    note TEXT NOT NULL,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT,
+    price_cents INTEGER
+  )
+''');

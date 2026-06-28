@@ -12,6 +12,7 @@ import '../models/income.dart';
 const _legacyExternalDbDir = '/storage/emulated/0/budget_manager';
 const _dbFileName = 'budget_manager.db';
 const _backupFileName = 'budget_manager_backup.db';
+const _databaseVersion = 4;
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -121,7 +122,7 @@ class DatabaseHelper {
       return _databaseFactory.openDatabase(
         path,
         options: OpenDatabaseOptions(
-          version: 3,
+          version: _databaseVersion,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         ),
@@ -130,7 +131,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 3,
+      version: _databaseVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -220,7 +221,51 @@ class DatabaseHelper {
           'UPDATE incomes SET price_cents = ROUND(price * 100)',
         );
       }
+      if (await _hasColumn(txn, 'expenses', 'price')) {
+        await _rebuildEntryTable(txn, 'expenses');
+      }
+      if (await _hasColumn(txn, 'incomes', 'price')) {
+        await _rebuildEntryTable(txn, 'incomes');
+      }
     });
+  }
+
+  Future<void> _rebuildEntryTable(DatabaseExecutor db, String table) async {
+    final replacement = '${table}_v4';
+    await db.execute('DROP TABLE IF EXISTS $replacement');
+    await db.execute('''
+      CREATE TABLE $replacement (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_ids TEXT NOT NULL,
+        price_cents INTEGER NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT,
+        updated_at TEXT,
+        deleted_at TEXT
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO $replacement (
+        id,
+        category_ids,
+        price_cents,
+        note,
+        created_at,
+        updated_at,
+        deleted_at
+      )
+      SELECT
+        id,
+        category_ids,
+        CAST(price_cents AS INTEGER),
+        note,
+        created_at,
+        updated_at,
+        deleted_at
+      FROM $table
+    ''');
+    await db.execute('DROP TABLE $table');
+    await db.execute('ALTER TABLE $replacement RENAME TO $table');
   }
 
   Future<bool> _hasColumn(
