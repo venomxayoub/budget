@@ -3,6 +3,8 @@ import '../models/expense.dart';
 import '../models/income.dart';
 import '../models/expense_category.dart';
 import '../models/income_category.dart';
+import '../models/debt_profile.dart';
+import '../models/debt_transaction.dart';
 import '../database/database_helper.dart';
 
 class EntryItem {
@@ -36,6 +38,8 @@ class TransactionProvider extends ChangeNotifier {
   List<Income> _incomes = [];
   List<ExpenseCategory> _expenseCategories = [];
   List<IncomeCategory> _incomeCategories = [];
+  List<DebtProfile> _debtProfiles = [];
+  List<DebtTransaction> _debtTransactions = [];
 
   List<Expense> get expenses => List.unmodifiable(_expenses);
   List<Income> get incomes => List.unmodifiable(_incomes);
@@ -43,6 +47,21 @@ class TransactionProvider extends ChangeNotifier {
       List.unmodifiable(_expenseCategories);
   List<IncomeCategory> get incomeCategories =>
       List.unmodifiable(_incomeCategories);
+
+  List<DebtProfile> get debtProfiles {
+    final profiles =
+        _debtProfiles.where((profile) => !profile.isArchived).toList()..sort(
+          (a, b) => _latestDebtActivity(b).compareTo(_latestDebtActivity(a)),
+        );
+    return List.unmodifiable(profiles);
+  }
+
+  List<DebtProfile> get archivedDebtProfiles {
+    final profiles =
+        _debtProfiles.where((profile) => profile.isArchived).toList()
+          ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
+    return List.unmodifiable(profiles);
+  }
 
   List<EntryItem> get entries {
     final items = <EntryItem>[
@@ -131,6 +150,66 @@ class TransactionProvider extends ChangeNotifier {
     return null;
   }
 
+  DebtProfile? getDebtProfileById(int id) {
+    for (final profile in _debtProfiles) {
+      if (profile.id == id) return profile;
+    }
+    return null;
+  }
+
+  DebtTransaction? getDebtTransactionById(int id) {
+    for (final transaction in _debtTransactions) {
+      if (transaction.id == id) return transaction;
+    }
+    return null;
+  }
+
+  List<DebtTransaction> debtTransactionsForProfile(int profileId) {
+    final transactions =
+        _debtTransactions
+            .where((transaction) => transaction.profileId == profileId)
+            .toList()
+          ..sort(_compareDebtTransactionsNewestFirst);
+    return List.unmodifiable(transactions);
+  }
+
+  int debtBalanceForProfile(int profileId) {
+    final profile = getDebtProfileById(profileId);
+    if (profile == null) {
+      throw StateError('The debt profile no longer exists.');
+    }
+
+    var balance = profile.initialBalanceCents;
+    final transactions =
+        _debtTransactions
+            .where((transaction) => transaction.profileId == profileId)
+            .toList()
+          ..sort(_compareDebtTransactionsChronologically);
+    for (final transaction in transactions) {
+      balance = _applyDebtTransaction(balance, transaction);
+    }
+    return balance;
+  }
+
+  int balanceBeforeDebtTransaction(DebtTransaction target) {
+    final profile = getDebtProfileById(target.profileId);
+    if (profile == null) {
+      throw StateError('The debt profile no longer exists.');
+    }
+
+    var balance = profile.initialBalanceCents;
+    final transactions =
+        _debtTransactions
+            .where((transaction) => transaction.profileId == target.profileId)
+            .toList()
+          ..sort(_compareDebtTransactionsChronologically);
+    for (final transaction in transactions) {
+      if (transaction.id == target.id) return balance;
+      balance = _applyDebtTransaction(balance, transaction);
+    }
+    throw StateError('The debt transaction no longer exists.');
+  }
+
   ExpenseCategory? getExpenseCategoryById(int id) {
     try {
       return _expenseCategories.firstWhere((c) => c.id == id);
@@ -187,6 +266,11 @@ class TransactionProvider extends ChangeNotifier {
         ...await _databaseHelper.getIncomes(),
         ...await _databaseHelper.getArchivedIncomes(),
       ];
+      _debtProfiles = [
+        ...await _databaseHelper.getDebtProfiles(),
+        ...await _databaseHelper.getArchivedDebtProfiles(),
+      ];
+      _debtTransactions = await _databaseHelper.getDebtTransactions();
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -316,6 +400,121 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> createDebtProfile({
+    required String name,
+    required int initialBalanceCents,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) throw ArgumentError('A profile name is required.');
+
+    final now = DateTime.now();
+    final pending = DebtProfile(
+      name: trimmedName,
+      initialBalanceCents: initialBalanceCents,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final id = await _databaseHelper.insertDebtProfile(pending);
+    _debtProfiles.add(pending.copyWith(id: id));
+    notifyListeners();
+  }
+
+  Future<void> renameDebtProfile(int id, String name) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) throw ArgumentError('A profile name is required.');
+    final index = _debtProfiles.indexWhere((profile) => profile.id == id);
+    if (index == -1 || _debtProfiles[index].isArchived) {
+      throw StateError('The debt profile no longer exists.');
+    }
+
+    _requireUpdated(await _databaseHelper.renameDebtProfile(id, trimmedName));
+    _debtProfiles[index] = _debtProfiles[index].copyWith(
+      name: trimmedName,
+      updatedAt: DateTime.now(),
+    );
+    notifyListeners();
+  }
+
+  Future<void> deleteDebtProfile(int id) async {
+    final index = _debtProfiles.indexWhere((profile) => profile.id == id);
+    if (index == -1 || _debtProfiles[index].isArchived) return;
+
+    final now = DateTime.now();
+    _requireUpdated(await _databaseHelper.softDeleteDebtProfile(id));
+    _debtProfiles[index] = _debtProfiles[index].copyWith(
+      deletedAt: now,
+      updatedAt: now,
+    );
+    notifyListeners();
+  }
+
+  Future<void> restoreDebtProfile(int id) async {
+    final index = _debtProfiles.indexWhere((profile) => profile.id == id);
+    if (index == -1 || !_debtProfiles[index].isArchived) return;
+
+    final now = DateTime.now();
+    _requireUpdated(await _databaseHelper.restoreDebtProfile(id));
+    _debtProfiles[index] = _debtProfiles[index].copyWith(
+      deletedAt: null,
+      updatedAt: now,
+    );
+    notifyListeners();
+  }
+
+  Future<void> addDebtTransaction({
+    required int profileId,
+    required DebtTransactionType type,
+    required int amountCents,
+    String? note,
+  }) async {
+    if (type != DebtTransactionType.update && amountCents <= 0) {
+      throw ArgumentError('Transaction amounts must be positive.');
+    }
+    final profileIndex = _debtProfiles.indexWhere(
+      (profile) => profile.id == profileId && !profile.isArchived,
+    );
+    if (profileIndex == -1) {
+      throw StateError('The debt profile no longer exists.');
+    }
+
+    final now = DateTime.now();
+    final trimmedNote = note?.trim();
+    final pending = DebtTransaction(
+      profileId: profileId,
+      type: type,
+      amountCents: amountCents,
+      note: trimmedNote == null || trimmedNote.isEmpty ? null : trimmedNote,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final id = await _databaseHelper.insertDebtTransaction(pending);
+    _debtTransactions.add(pending.copyWith(id: id));
+    _debtProfiles[profileIndex] = _debtProfiles[profileIndex].copyWith(
+      updatedAt: now,
+    );
+    notifyListeners();
+  }
+
+  Future<void> deleteDebtTransaction(int id) async {
+    final transactionIndex = _debtTransactions.indexWhere(
+      (transaction) => transaction.id == id,
+    );
+    if (transactionIndex == -1) return;
+
+    final profileId = _debtTransactions[transactionIndex].profileId;
+    _requireUpdated(await _databaseHelper.softDeleteDebtTransaction(id));
+    _debtTransactions.removeAt(transactionIndex);
+    final profileIndex = _debtProfiles.indexWhere(
+      (profile) => profile.id == profileId,
+    );
+    if (profileIndex != -1) {
+      _debtProfiles[profileIndex] = _debtProfiles[profileIndex].copyWith(
+        updatedAt: DateTime.now(),
+      );
+    }
+    notifyListeners();
+  }
+
   Future<void> addExpenseCategory(ExpenseCategory category) async {
     final now = DateTime.now();
     final pending = category.copyWith(
@@ -377,6 +576,39 @@ class TransactionProvider extends ChangeNotifier {
       throw StateError('The saved record no longer exists.');
     }
   }
+
+  DateTime _latestDebtActivity(DebtProfile profile) {
+    var latest = profile.updatedAt ?? profile.createdAt ?? DateTime(0);
+    for (final transaction in _debtTransactions) {
+      if (transaction.profileId != profile.id) continue;
+      final createdAt = transaction.createdAt ?? DateTime(0);
+      if (createdAt.isAfter(latest)) latest = createdAt;
+    }
+    return latest;
+  }
+
+  static int _applyDebtTransaction(int balance, DebtTransaction transaction) =>
+      switch (transaction.type) {
+        DebtTransactionType.gave => balance + transaction.amountCents,
+        DebtTransactionType.received => balance - transaction.amountCents,
+        DebtTransactionType.update => transaction.amountCents,
+      };
+
+  static int _compareDebtTransactionsChronologically(
+    DebtTransaction a,
+    DebtTransaction b,
+  ) {
+    final byDate = (a.createdAt ?? DateTime(0)).compareTo(
+      b.createdAt ?? DateTime(0),
+    );
+    if (byDate != 0) return byDate;
+    return (a.id ?? 0).compareTo(b.id ?? 0);
+  }
+
+  static int _compareDebtTransactionsNewestFirst(
+    DebtTransaction a,
+    DebtTransaction b,
+  ) => -_compareDebtTransactionsChronologically(a, b);
 }
 
 final List<ExpenseCategory> defaultExpenseCategories = [

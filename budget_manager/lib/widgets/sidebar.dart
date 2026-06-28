@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class Sidebar extends StatelessWidget {
+class Sidebar extends StatefulWidget {
   final String activePage;
   final ValueChanged<String> onPageChanged;
   final Future<void> Function() onImportDatabase;
@@ -12,6 +12,13 @@ class Sidebar extends StatelessWidget {
     required this.onPageChanged,
     required this.onImportDatabase,
   });
+
+  @override
+  State<Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<Sidebar> {
+  late bool _archiveExpanded = widget.activePage.startsWith('archive_');
 
   @override
   Widget build(BuildContext context) {
@@ -26,26 +33,63 @@ class Sidebar extends StatelessWidget {
             _NavItem(
               icon: Icons.receipt_long,
               label: 'Entries',
-              isActive: activePage == 'entries',
-              onTap: () => onPageChanged('entries'),
+              isActive: widget.activePage == 'entries',
+              onTap: () => widget.onPageChanged('entries'),
             ),
             _NavItem(
               icon: Icons.category,
               label: 'Categories',
-              isActive: activePage == 'categories',
-              onTap: () => onPageChanged('categories'),
+              isActive: widget.activePage == 'categories',
+              onTap: () => widget.onPageChanged('categories'),
             ),
             _NavItem(
-              icon: Icons.archive,
-              label: 'Archive',
-              isActive: activePage == 'archive',
-              onTap: () => onPageChanged('archive'),
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Debts & Loans',
+              isActive: widget.activePage == 'debts',
+              onTap: () => widget.onPageChanged('debts'),
+            ),
+            ExpansionTile(
+              key: const Key('archive-navigation'),
+              initiallyExpanded: _archiveExpanded,
+              onExpansionChanged:
+                  (expanded) => setState(() => _archiveExpanded = expanded),
+              leading: Icon(
+                Icons.archive,
+                color:
+                    widget.activePage.startsWith('archive_')
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+              ),
+              title: Text(
+                'Archive',
+                style: TextStyle(
+                  fontWeight:
+                      widget.activePage.startsWith('archive_')
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                ),
+              ),
+              childrenPadding: const EdgeInsets.only(left: 24),
+              children: [
+                _NavItem(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Entries',
+                  isActive: widget.activePage == 'archive_entries',
+                  onTap: () => widget.onPageChanged('archive_entries'),
+                ),
+                _NavItem(
+                  icon: Icons.people_outline,
+                  label: 'Debt Profiles',
+                  isActive: widget.activePage == 'archive_debt_profiles',
+                  onTap: () => widget.onPageChanged('archive_debt_profiles'),
+                ),
+              ],
             ),
             ListTile(
               leading: const Icon(Icons.restore_page_outlined),
               title: const Text('Import Previous Data'),
               subtitle: const Text('Select a legacy .db file'),
-              onTap: onImportDatabase,
+              onTap: widget.onImportDatabase,
             ),
             const SizedBox(height: 8),
           ],
@@ -104,7 +148,7 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.1.0';
+    const version = '1.2.0';
     const downloadUrl =
         'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
 

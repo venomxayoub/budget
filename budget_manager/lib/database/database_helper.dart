@@ -8,11 +8,13 @@ import '../models/expense_category.dart';
 import '../models/income_category.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
+import '../models/debt_profile.dart';
+import '../models/debt_transaction.dart';
 
 const _legacyExternalDbDir = '/storage/emulated/0/budget_manager';
 const _dbFileName = 'budget_manager.db';
 const _backupFileName = 'budget_manager_backup.db';
-const _databaseVersion = 4;
+const _databaseVersion = 5;
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -197,6 +199,8 @@ class DatabaseHelper {
         deleted_at TEXT
       )
     ''');
+
+    await _createDebtTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -227,7 +231,41 @@ class DatabaseHelper {
       if (await _hasColumn(txn, 'incomes', 'price')) {
         await _rebuildEntryTable(txn, 'incomes');
       }
+      if (oldVersion < 5) {
+        await _createDebtTables(txn);
+      }
     });
+  }
+
+  Future<void> _createDebtTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS debt_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        initial_balance_cents INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS debt_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('gave', 'received', 'update')),
+        amount_cents INTEGER NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        FOREIGN KEY (profile_id) REFERENCES debt_profiles (id),
+        CHECK (type = 'update' OR amount_cents > 0)
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_debt_transactions_profile_chronological
+      ON debt_transactions (profile_id, created_at, id)
+    ''');
   }
 
   Future<void> _rebuildEntryTable(DatabaseExecutor db, String table) async {
@@ -483,5 +521,163 @@ class DatabaseHelper {
   Future<int> permanentDeleteIncome(int id) async {
     final db = await database;
     return await db.delete('incomes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> insertDebtProfile(DebtProfile profile) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    final values = profile.toMap()..remove('id');
+    values['created_at'] = profile.createdAt?.toIso8601String() ?? now;
+    values['updated_at'] = profile.updatedAt?.toIso8601String() ?? now;
+    return db.insert('debt_profiles', values);
+  }
+
+  Future<List<DebtProfile>> getDebtProfiles() async {
+    final db = await database;
+    final maps = await db.query(
+      'debt_profiles',
+      where: 'deleted_at IS NULL',
+      orderBy: 'updated_at DESC, id DESC',
+    );
+    return maps.map(DebtProfile.fromMap).toList();
+  }
+
+  Future<List<DebtProfile>> getArchivedDebtProfiles() async {
+    final db = await database;
+    final maps = await db.query(
+      'debt_profiles',
+      where: 'deleted_at IS NOT NULL',
+      orderBy: 'deleted_at DESC, id DESC',
+    );
+    return maps.map(DebtProfile.fromMap).toList();
+  }
+
+  Future<int> renameDebtProfile(int id, String name) async {
+    final db = await database;
+    return db.update(
+      'debt_profiles',
+      {'name': name, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> softDeleteDebtProfile(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return db.update(
+      'debt_profiles',
+      {'deleted_at': now, 'updated_at': now},
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> restoreDebtProfile(int id) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return db.update(
+      'debt_profiles',
+      {'deleted_at': null, 'updated_at': now},
+      where: 'id = ? AND deleted_at IS NOT NULL',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> insertDebtTransaction(DebtTransaction transaction) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final profile = await txn.query(
+        'debt_profiles',
+        columns: const ['id'],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [transaction.profileId],
+        limit: 1,
+      );
+      if (profile.isEmpty) {
+        throw StateError('The debt profile no longer exists.');
+      }
+
+      final now = DateTime.now().toIso8601String();
+      final values = transaction.toMap()..remove('id');
+      values['created_at'] = transaction.createdAt?.toIso8601String() ?? now;
+      values['updated_at'] = transaction.updatedAt?.toIso8601String() ?? now;
+      final id = await txn.insert('debt_transactions', values);
+      await txn.update(
+        'debt_profiles',
+        {'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [transaction.profileId],
+      );
+      return id;
+    });
+  }
+
+  Future<List<DebtTransaction>> getDebtTransactions({int? profileId}) async {
+    final db = await database;
+    final maps = await db.query(
+      'debt_transactions',
+      where:
+          profileId == null
+              ? 'deleted_at IS NULL'
+              : 'profile_id = ? AND deleted_at IS NULL',
+      whereArgs: profileId == null ? null : [profileId],
+      orderBy: 'created_at ASC, id ASC',
+    );
+    return maps.map(DebtTransaction.fromMap).toList();
+  }
+
+  Future<int> softDeleteDebtTransaction(int id) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'debt_transactions',
+        columns: const ['profile_id'],
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return 0;
+
+      final now = DateTime.now().toIso8601String();
+      final affected = await txn.update(
+        'debt_transactions',
+        {'deleted_at': now, 'updated_at': now},
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+      );
+      await txn.update(
+        'debt_profiles',
+        {'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [rows.single['profile_id']],
+      );
+      return affected;
+    });
+  }
+
+  Future<int> calculateDebtBalance(int profileId) async {
+    final db = await database;
+    final profiles = await db.query(
+      'debt_profiles',
+      columns: const ['initial_balance_cents'],
+      where: 'id = ?',
+      whereArgs: [profileId],
+      limit: 1,
+    );
+    if (profiles.isEmpty) {
+      throw StateError('The debt profile no longer exists.');
+    }
+
+    var balance = (profiles.single['initial_balance_cents'] as num).toInt();
+    final transactions = await getDebtTransactions(profileId: profileId);
+    for (final transaction in transactions) {
+      balance = switch (transaction.type) {
+        DebtTransactionType.gave => balance + transaction.amountCents,
+        DebtTransactionType.received => balance - transaction.amountCents,
+        DebtTransactionType.update => transaction.amountCents,
+      };
+    }
+    return balance;
   }
 }

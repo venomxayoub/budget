@@ -14,6 +14,8 @@ import 'entry_form_screen.dart';
 import 'entry_detail_screen.dart';
 import 'categories_screen.dart';
 import 'category_form_screen.dart';
+import 'debt_profiles_screen.dart';
+import 'archived_debt_profiles_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,61 +53,67 @@ class _HomeScreenState extends State<HomeScreen> {
           await _importPreviousData();
         },
       ),
-      body:
-          _activePage == 'entries'
-              ? _buildEntriesView()
-              : _activePage == 'archive'
-              ? _buildArchiveView()
-              : CategoriesScreen(
-                onEditExpenseCategory:
-                    (category) => _openExpenseCategoryForm(context, category),
-                onEditIncomeCategory:
-                    (category) => _openIncomeCategoryForm(context, category),
-              ),
-      floatingActionButton:
-          _activePage == 'entries'
-              ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'expense_fab',
-                    mini: true,
-                    backgroundColor: Colors.redAccent,
-                    onPressed: () => _openEntryForm(context, true),
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  FloatingActionButton(
-                    heroTag: 'income_fab',
-                    mini: true,
-                    backgroundColor: Colors.green,
-                    onPressed: () => _openEntryForm(context, false),
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
-                ],
-              )
-              : _activePage == 'archive'
-              ? null
-              : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'expense_cat_fab',
-                    mini: true,
-                    backgroundColor: Colors.redAccent,
-                    onPressed: () => _openExpenseCategoryForm(context),
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  FloatingActionButton(
-                    heroTag: 'income_cat_fab',
-                    mini: true,
-                    backgroundColor: Colors.green,
-                    onPressed: () => _openIncomeCategoryForm(context),
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
-                ],
-              ),
+      body: _buildActivePage(),
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
+
+  Widget _buildActivePage() => switch (_activePage) {
+    'categories' => CategoriesScreen(
+      onEditExpenseCategory:
+          (category) => _openExpenseCategoryForm(context, category),
+      onEditIncomeCategory:
+          (category) => _openIncomeCategoryForm(context, category),
+    ),
+    'debts' => const DebtProfilesScreen(),
+    'archive_entries' => _buildArchiveView(),
+    'archive_debt_profiles' => const ArchivedDebtProfilesScreen(),
+    _ => _buildEntriesView(),
+  };
+
+  Widget? _buildFloatingActionButton() {
+    if (_activePage == 'entries') {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'expense_fab',
+            mini: true,
+            backgroundColor: Colors.redAccent,
+            onPressed: () => _openEntryForm(context, true),
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'income_fab',
+            mini: true,
+            backgroundColor: Colors.green,
+            onPressed: () => _openEntryForm(context, false),
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
+      );
+    }
+    if (_activePage != 'categories') return null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FloatingActionButton(
+          heroTag: 'expense_cat_fab',
+          mini: true,
+          backgroundColor: Colors.redAccent,
+          onPressed: () => _openExpenseCategoryForm(context),
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+        const SizedBox(height: 8),
+        FloatingActionButton(
+          heroTag: 'income_cat_fab',
+          mini: true,
+          backgroundColor: Colors.green,
+          onPressed: () => _openIncomeCategoryForm(context),
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      ],
     );
   }
 
