@@ -30,7 +30,7 @@ void main() {
     expect(find.byIcon(Icons.menu), findsNothing);
   });
 
-  testWidgets('drawer opens from a left-edge swipe', (
+  testWidgets('drawer opens from a left-to-right swipe started inward', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -40,7 +40,7 @@ void main() {
       ),
     );
 
-    await tester.dragFrom(const Offset(1, 300), const Offset(300, 0));
+    await tester.dragFrom(const Offset(64, 300), const Offset(300, 0));
     await tester.pumpAndSettle();
 
     expect(find.text('Update'), findsOneWidget);
