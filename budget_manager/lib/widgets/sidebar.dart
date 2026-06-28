@@ -28,14 +28,20 @@ class _SidebarState extends State<Sidebar> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _UpdateButton(),
-            const Spacer(),
+            ListTile(
+              leading: const Icon(Icons.restore_page_outlined),
+              title: const Text('Import Previous Data'),
+              subtitle: const Text('Select a legacy .db file'),
+              onTap: widget.onImportDatabase,
+            ),
             _NavItem(
               icon: Icons.receipt_long,
               label: 'Entries',
               isActive: widget.activePage == 'entries',
               onTap: () => widget.onPageChanged('entries'),
             ),
+            _UpdateButton(),
+            const Spacer(),
             _NavItem(
               icon: Icons.category,
               label: 'Categories',
@@ -84,12 +90,6 @@ class _SidebarState extends State<Sidebar> {
                   onTap: () => widget.onPageChanged('archive_debt_profiles'),
                 ),
               ],
-            ),
-            ListTile(
-              leading: const Icon(Icons.restore_page_outlined),
-              title: const Text('Import Previous Data'),
-              subtitle: const Text('Select a legacy .db file'),
-              onTap: widget.onImportDatabase,
             ),
             const SizedBox(height: 8),
           ],
@@ -148,7 +148,7 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.2.1';
+    const version = '1.2.2';
     const downloadUrl =
         'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
 

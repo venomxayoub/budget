@@ -168,7 +168,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              textInputAction: TextInputAction.next,
+              textInputAction: TextInputAction.done,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
@@ -193,7 +193,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                 fontWeight: FontWeight.w700,
                 color: accentColor,
               ),
-              onSubmitted: (_) => _noteFocusNode.requestFocus(),
+              onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 16),
             TextField(
