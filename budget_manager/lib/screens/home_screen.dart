@@ -25,6 +25,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _drawerSwipeWidth = 96.0;
+
   String _activePage = 'entries';
   DateTime _selectedMonth = DateTime(
     DateTime.now().year,
@@ -41,7 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawerEnableOpenDragGesture: true,
-      drawerEdgeDragWidth: 40,
+      // Android's system back gesture owns the very edge of the display.
+      // Keep the drawer drag target wide enough to start just inside it.
+      drawerEdgeDragWidth: _drawerSwipeWidth,
       drawer: Sidebar(
         activePage: _activePage,
         onPageChanged: (page) {
