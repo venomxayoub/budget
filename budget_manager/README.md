@@ -10,29 +10,18 @@ multi-device, multi-user, or cloud-synchronized product.
 
 ## Building the APK
 
-The Android release build requires Flutter, the Android SDK, and JDK 17. Ensure
-`JAVA_HOME` points to a JDK 17 installation; newer JDKs may not be compatible
-with the project's Gradle and Kotlin versions.
-
-From the repository root, run:
+Use the release script in dry-run mode from the repository root:
 
 ```bash
-cd budget_manager
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk --target-platform android-arm64 --release
+tools/publish-android-release.sh --dry-run
 ```
 
-If the shell has an invalid or incompatible `JAVA_HOME`, set it for the build:
+It resolves JDK 17, runs `flutter pub get`, analysis, and the full test suite,
+then builds and verifies the signed ARM64-only APK. Set `FLUTTER_BIN`,
+`JAVA_HOME`, or `ANDROID_SDK_ROOT` only when automatic toolchain discovery does
+not match the local installation.
 
-```bash
-JAVA_HOME=/path/to/jdk-17 \
-  flutter build apk --target-platform android-arm64 --release
-```
-
-The build is signed using the release configuration in
-`android/app/build.gradle.kts`. The resulting file is:
+The resulting file is:
 
 ```text
 build/app/outputs/flutter-apk/app-release.apk
@@ -44,32 +33,57 @@ also packages ARMv7 and x86_64 libraries and is roughly three times larger.
 
 ## Updating the App
 
-When you need to publish a new version:
+When you need to publish a new version, use the following workflow.
 
 ### 1. Bump the version
 
-In `android/app/build.gradle.kts`:
+Update all three version declarations and commit them to `master`:
 
-```groovy
-defaultConfig {
-    versionCode = 2  // increment by 1 each release
-    versionName = "1.0.1"  // update as needed
-}
+- `pubspec.yaml`: `version: <name>+<build>`
+- `android/app/build.gradle.kts`: `versionName` and `versionCode`
+- `lib/widgets/sidebar.dart`: displayed `version`
+
+For example, a `1.2.2+10` release requires:
+
+```text
+# pubspec.yaml
+version: 1.2.2+10
+
+# android/app/build.gradle.kts
+versionCode = 10
+versionName = "1.2.2"
+
+# lib/widgets/sidebar.dart
+const version = '1.2.2';
 ```
 
-### 2. Rebuild the APK
+The release script rejects inconsistent versions, versions that do not move
+forward, duplicate tags, dirty worktrees, and commits that do not exactly match
+`origin/master`.
 
-Follow [Building the APK](#building-the-apk). The release artifact should be
-approximately 7–8 MB.
+### 2. Write release notes
 
-### 3. Publish a GitHub release
+Create a Markdown file outside the worktree so the repository remains clean:
 
 ```bash
-gh release create v1.0.1 \
-  --title "v1.0.1" \
-  --notes "Release notes here" \
-  build/app/outputs/flutter-apk/app-release.apk
+$EDITOR /tmp/budget-v1.2.2-notes.md
 ```
+
+The script appends the version, build number, and APK SHA-256 automatically.
+
+### 3. Build and publish
+
+Run:
+
+```bash
+tools/publish-android-release.sh \
+  --notes-file /tmp/budget-v1.2.2-notes.md
+```
+
+The script derives the `v<version>` tag, targets the full `origin/master`
+commit SHA, uploads the artifact as `app-release.apk`, confirms the remote
+digest, and verifies the in-app updater's latest-download URL. The release
+artifact should be approximately 7–8 MB.
 
 ### 4. Install on device
 
