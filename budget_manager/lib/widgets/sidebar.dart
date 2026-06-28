@@ -21,7 +21,8 @@ class Sidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
+            _UpdateButton(),
+            const Spacer(),
             _NavItem(
               icon: Icons.receipt_long,
               label: 'Entries',
@@ -40,14 +41,13 @@ class Sidebar extends StatelessWidget {
               isActive: activePage == 'archive',
               onTap: () => onPageChanged('archive'),
             ),
-            const Spacer(),
             ListTile(
               leading: const Icon(Icons.restore_page_outlined),
               title: const Text('Import Previous Data'),
               subtitle: const Text('Select a legacy .db file'),
               onTap: onImportDatabase,
             ),
-            _UpdateButton(),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -104,17 +104,15 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.0.5';
+    const version = '1.1.0';
     const downloadUrl =
         'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(),
-          const SizedBox(height: 8),
           Text(
             'v$version',
             style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),

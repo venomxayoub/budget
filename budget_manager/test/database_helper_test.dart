@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:budget_manager/database/database_helper.dart';
 import 'package:budget_manager/models/expense.dart';
+import 'package:budget_manager/models/expense_category.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -131,6 +132,42 @@ void main() {
     expect(<int>{firstId, secondId, thirdId}, hasLength(3));
     expect(expenses, hasLength(3));
     await secondSession.close();
+  });
+
+  test('entry and category updates persist', () async {
+    final helper = _testHelper(databasePath);
+    final expenseId = await helper.insertExpense(_expense('Original'));
+    final categoryId = await helper.insertExpenseCategory(
+      ExpenseCategory(name: 'Original', emoji: '📦'),
+    );
+
+    expect(
+      await helper.updateExpense(
+        Expense(
+          id: expenseId,
+          categoryIds: const [1],
+          amountCents: 9876,
+          note: 'Updated',
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026, 2),
+        ),
+      ),
+      1,
+    );
+    expect(
+      await helper.updateExpenseCategory(
+        ExpenseCategory(id: categoryId, name: 'Updated category', emoji: '✅'),
+      ),
+      1,
+    );
+
+    expect((await helper.getExpenses()).single.note, 'Updated');
+    expect((await helper.getExpenses()).single.amountCents, 9876);
+    expect(
+      (await helper.getExpenseCategories()).single.name,
+      'Updated category',
+    );
+    await helper.close();
   });
 }
 

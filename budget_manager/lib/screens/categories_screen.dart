@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/expense_category.dart';
+import '../models/income_category.dart';
 import '../providers/transaction_provider.dart';
 import '../widgets/category_badge.dart';
 
 class CategoriesScreen extends StatelessWidget {
-  final VoidCallback onAddExpenseCategory;
-  final VoidCallback onAddIncomeCategory;
+  final ValueChanged<ExpenseCategory> onEditExpenseCategory;
+  final ValueChanged<IncomeCategory> onEditIncomeCategory;
 
   const CategoriesScreen({
     super.key,
-    required this.onAddExpenseCategory,
-    required this.onAddIncomeCategory,
+    required this.onEditExpenseCategory,
+    required this.onEditIncomeCategory,
   });
 
   @override
@@ -21,7 +23,7 @@ class CategoriesScreen extends StatelessWidget {
     final incomeCats = provider.incomeCategories;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
       children: [
         _SectionHeader(title: 'Expense Categories', color: Colors.redAccent),
         if (expenseCats.isEmpty)
@@ -32,10 +34,16 @@ class CategoriesScreen extends StatelessWidget {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: expenseCats.map((cat) => CategoryBadge(
-                emoji: cat.emoji,
-                name: cat.name,
-              )).toList(),
+              children:
+                  expenseCats
+                      .map(
+                        (cat) => CategoryBadge(
+                          emoji: cat.emoji,
+                          name: cat.name,
+                          onTap: () => onEditExpenseCategory(cat),
+                        ),
+                      )
+                      .toList(),
             ),
           ),
         const SizedBox(height: 20),
@@ -48,10 +56,16 @@ class CategoriesScreen extends StatelessWidget {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: incomeCats.map((cat) => CategoryBadge(
-                emoji: cat.emoji,
-                name: cat.name,
-              )).toList(),
+              children:
+                  incomeCats
+                      .map(
+                        (cat) => CategoryBadge(
+                          emoji: cat.emoji,
+                          name: cat.name,
+                          onTap: () => onEditIncomeCategory(cat),
+                        ),
+                      )
+                      .toList(),
             ),
           ),
       ],
@@ -80,10 +94,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
       ],
     );

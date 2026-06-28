@@ -10,8 +10,12 @@ import '../widgets/category_badge.dart';
 
 class EntryFormScreen extends StatefulWidget {
   final bool isExpense;
+  final EntryItem? entry;
 
-  const EntryFormScreen({super.key, required this.isExpense});
+  EntryFormScreen({super.key, required this.isExpense, this.entry})
+    : assert(entry == null || entry.isExpense == isExpense);
+
+  bool get isEditing => entry != null;
 
   @override
   State<EntryFormScreen> createState() => _EntryFormScreenState();
@@ -24,6 +28,16 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   final _priceFocusNode = FocusNode();
   final _noteFocusNode = FocusNode();
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final entry = widget.entry;
+    if (entry == null) return;
+    _priceController.text = formatCurrency(entry.amountCents).substring(1);
+    _noteController.text = entry.note;
+    _selectedCategoryIds.addAll(entry.categoryIds);
+  }
 
   @override
   void dispose() {
@@ -75,29 +89,44 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     setState(() => _isSubmitting = true);
     try {
       final now = DateTime.now();
+      final existing = widget.entry;
       if (widget.isExpense) {
-        await provider.addExpense(
-          Expense(
-            categoryIds: categoryIds,
-            amountCents: amountCents,
-            note: _noteController.text.trim(),
-            createdAt: now,
-            updatedAt: now,
-          ),
+        final expense = Expense(
+          id: existing?.id,
+          categoryIds: categoryIds,
+          amountCents: amountCents,
+          note: _noteController.text.trim(),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: existing?.deletedAt,
         );
+        if (existing == null) {
+          await provider.addExpense(expense);
+        } else {
+          await provider.updateExpense(expense);
+        }
       } else {
-        await provider.addIncome(
-          Income(
-            categoryIds: categoryIds,
-            amountCents: amountCents,
-            note: _noteController.text.trim(),
-            createdAt: now,
-            updatedAt: now,
-          ),
+        final income = Income(
+          id: existing?.id,
+          categoryIds: categoryIds,
+          amountCents: amountCents,
+          note: _noteController.text.trim(),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          deletedAt: existing?.deletedAt,
         );
+        if (existing == null) {
+          await provider.addIncome(income);
+        } else {
+          await provider.updateIncome(income);
+        }
       }
 
       if (!mounted) return;
+      if (widget.isEditing) {
+        Navigator.pop(context, true);
+        return;
+      }
       _priceController.clear();
       _noteController.clear();
       _selectedCategoryIds.clear();
@@ -122,7 +151,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isExpense ? 'Add Expense' : 'Add Income'),
+        title: Text(
+          '${widget.isEditing ? 'Edit' : 'Add'} ${widget.isExpense ? 'Expense' : 'Income'}',
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -242,7 +273,11 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                     ),
                   ),
                   child: Text(
-                    widget.isExpense ? 'Add Expense' : 'Add Income',
+                    widget.isEditing
+                        ? 'Save Changes'
+                        : widget.isExpense
+                        ? 'Add Expense'
+                        : 'Add Income',
                     style: const TextStyle(color: Colors.white),
                   ),
                 ),

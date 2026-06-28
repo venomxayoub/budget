@@ -294,9 +294,11 @@ class DatabaseHelper {
 
   Future<int> updateExpenseCategory(ExpenseCategory category) async {
     final db = await database;
+    final values = category.toMap()..remove('id');
+    values['updated_at'] = DateTime.now().toIso8601String();
     return await db.update(
       'expense_categories',
-      {...category.toMap(), 'updated_at': DateTime.now().toIso8601String()},
+      values,
       where: 'id = ?',
       whereArgs: [category.id],
     );
@@ -328,9 +330,11 @@ class DatabaseHelper {
 
   Future<int> updateIncomeCategory(IncomeCategory category) async {
     final db = await database;
+    final values = category.toMap()..remove('id');
+    values['updated_at'] = DateTime.now().toIso8601String();
     return await db.update(
       'income_categories',
-      {...category.toMap(), 'updated_at': DateTime.now().toIso8601String()},
+      values,
       where: 'id = ?',
       whereArgs: [category.id],
     );
@@ -376,9 +380,11 @@ class DatabaseHelper {
 
   Future<int> updateExpense(Expense expense) async {
     final db = await database;
+    final values = expense.toMap()..remove('id');
+    values['updated_at'] = DateTime.now().toIso8601String();
     return await db.update(
       'expenses',
-      {...expense.toMap(), 'updated_at': DateTime.now().toIso8601String()},
+      values,
       where: 'id = ?',
       whereArgs: [expense.id],
     );
@@ -442,9 +448,11 @@ class DatabaseHelper {
 
   Future<int> updateIncome(Income income) async {
     final db = await database;
+    final values = income.toMap()..remove('id');
+    values['updated_at'] = DateTime.now().toIso8601String();
     return await db.update(
       'incomes',
-      {...income.toMap(), 'updated_at': DateTime.now().toIso8601String()},
+      values,
       where: 'id = ?',
       whereArgs: [income.id],
     );

@@ -7,8 +7,20 @@ import '../providers/transaction_provider.dart';
 
 class CategoryFormScreen extends StatefulWidget {
   final bool isExpense;
+  final ExpenseCategory? expenseCategory;
+  final IncomeCategory? incomeCategory;
 
-  const CategoryFormScreen({super.key, required this.isExpense});
+  const CategoryFormScreen({
+    super.key,
+    required this.isExpense,
+    this.expenseCategory,
+    this.incomeCategory,
+  }) : assert(
+         (isExpense && incomeCategory == null) ||
+             (!isExpense && expenseCategory == null),
+       );
+
+  bool get isEditing => expenseCategory != null || incomeCategory != null;
 
   @override
   State<CategoryFormScreen> createState() => _CategoryFormScreenState();
@@ -20,6 +32,18 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _nameFocusNode = FocusNode();
   final _emojiFocusNode = FocusNode();
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.expenseCategory != null) {
+      _nameController.text = widget.expenseCategory!.name;
+      _emojiController.text = widget.expenseCategory!.emoji;
+    } else if (widget.incomeCategory != null) {
+      _nameController.text = widget.incomeCategory!.name;
+      _emojiController.text = widget.incomeCategory!.emoji;
+    }
+  }
 
   @override
   void dispose() {
@@ -55,26 +79,36 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     setState(() => _isSubmitting = true);
     try {
       if (widget.isExpense) {
-        await provider.addExpenseCategory(
-          ExpenseCategory(
-            name: name,
-            emoji: emoji,
-            createdAt: now,
-            updatedAt: now,
-          ),
+        final existing = widget.expenseCategory;
+        final category = ExpenseCategory(
+          id: existing?.id,
+          name: name,
+          emoji: emoji,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
         );
+        if (existing == null) {
+          await provider.addExpenseCategory(category);
+        } else {
+          await provider.updateExpenseCategory(category);
+        }
       } else {
-        await provider.addIncomeCategory(
-          IncomeCategory(
-            name: name,
-            emoji: emoji,
-            createdAt: now,
-            updatedAt: now,
-          ),
+        final existing = widget.incomeCategory;
+        final category = IncomeCategory(
+          id: existing?.id,
+          name: name,
+          emoji: emoji,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
         );
+        if (existing == null) {
+          await provider.addIncomeCategory(category);
+        } else {
+          await provider.updateIncomeCategory(category);
+        }
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -91,7 +125,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.isExpense ? 'Add Expense Category' : 'Add Income Category',
+          widget.isEditing
+              ? 'Edit ${widget.isExpense ? 'Expense' : 'Income'} Category'
+              : 'Add ${widget.isExpense ? 'Expense' : 'Income'} Category',
         ),
         centerTitle: true,
       ),
@@ -169,9 +205,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Add',
-                    style: TextStyle(color: Colors.white),
+                  child: Text(
+                    widget.isEditing ? 'Save Changes' : 'Add',
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
               ),

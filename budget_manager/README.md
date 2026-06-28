@@ -1,6 +1,12 @@
 # Budget Manager
 
-A Flutter expense and income tracking app for Android.
+A Flutter expense and income tracking app exclusively for Android mobile
+devices. Desktop, web, iOS, and other generated Flutter targets are not
+supported release platforms for this project.
+
+This is a personal, local-only, single-user application intended to run on one
+personal phone (a Samsung S22 Ultra). It is not designed as a public,
+multi-device, multi-user, or cloud-synchronized product.
 
 ## Updating the App
 

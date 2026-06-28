@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/transaction_provider.dart';
 import '../utils/currency.dart';
+import 'entry_form_screen.dart';
 
 class EntryDetailScreen extends StatelessWidget {
   final EntryItem entry;
@@ -14,20 +15,41 @@ class EntryDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final provider = context.watch<TransactionProvider>();
-    final accentColor = entry.isExpense ? Colors.redAccent : Colors.green;
+    final currentEntry =
+        provider.getEntryById(id: entry.id, isExpense: entry.isExpense) ??
+        entry;
+    final accentColor =
+        currentEntry.isExpense ? Colors.redAccent : Colors.green;
 
-    final catMap = provider.getCategoryMap(entry.isExpense);
+    final catMap = provider.getCategoryMap(currentEntry.isExpense);
 
     final categories =
-        entry.categoryIds
+        currentEntry.categoryIds
             .map((id) => catMap[id])
             .where((c) => c != null)
             .toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(entry.isExpense ? 'Expense' : 'Income'),
+        title: Text(currentEntry.isExpense ? 'Expense' : 'Income'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Edit',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed:
+                () => Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (_) => EntryFormScreen(
+                          isExpense: currentEntry.isExpense,
+                          entry: currentEntry,
+                        ),
+                  ),
+                ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -45,7 +67,7 @@ class EntryDetailScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  '${entry.isExpense ? '-' : '+'}${formatCurrency(entry.amountCents)}',
+                  '${currentEntry.isExpense ? '-' : '+'}${formatCurrency(currentEntry.amountCents)}',
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.w800,
@@ -55,7 +77,7 @@ class EntryDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            if (entry.note.isNotEmpty) ...[
+            if (currentEntry.note.isNotEmpty) ...[
               Text(
                 'Note',
                 style: TextStyle(
@@ -65,7 +87,7 @@ class EntryDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(entry.note, style: const TextStyle(fontSize: 16)),
+              Text(currentEntry.note, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 20),
             ],
             Text(
@@ -111,10 +133,12 @@ class EntryDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              DateFormat('EEEE, MMMM d, yyyy - h:mm a').format(entry.createdAt),
+              DateFormat(
+                'EEEE, MMMM d, yyyy - h:mm a',
+              ).format(currentEntry.createdAt),
               style: const TextStyle(fontSize: 14),
             ),
-            if (entry.deletedAt != null) ...[
+            if (currentEntry.deletedAt != null) ...[
               Text(
                 'Deleted',
                 style: TextStyle(
@@ -127,13 +151,13 @@ class EntryDetailScreen extends StatelessWidget {
               Text(
                 DateFormat(
                   'EEEE, MMMM d, yyyy - h:mm a',
-                ).format(entry.deletedAt!),
+                ).format(currentEntry.deletedAt!),
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 12),
             ],
             const SizedBox(height: 32),
-            if (entry.isArchived) ...[
+            if (currentEntry.isArchived) ...[
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(

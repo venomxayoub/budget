@@ -100,6 +100,37 @@ class TransactionProvider extends ChangeNotifier {
     return items;
   }
 
+  EntryItem? getEntryById({required int id, required bool isExpense}) {
+    if (isExpense) {
+      for (final item in _expenses) {
+        if (item.id != id) continue;
+        return EntryItem(
+          id: item.id!,
+          isExpense: true,
+          amountCents: item.amountCents,
+          note: item.note,
+          categoryIds: item.categoryIds,
+          createdAt: item.createdAt!,
+          deletedAt: item.deletedAt,
+        );
+      }
+    } else {
+      for (final item in _incomes) {
+        if (item.id != id) continue;
+        return EntryItem(
+          id: item.id!,
+          isExpense: false,
+          amountCents: item.amountCents,
+          note: item.note,
+          categoryIds: item.categoryIds,
+          createdAt: item.createdAt!,
+          deletedAt: item.deletedAt,
+        );
+      }
+    }
+    return null;
+  }
+
   ExpenseCategory? getExpenseCategoryById(int id) {
     try {
       return _expenseCategories.firstWhere((c) => c.id == id);
@@ -211,6 +242,26 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateExpense(Expense expense) async {
+    final index = _expenses.indexWhere((item) => item.id == expense.id);
+    if (index == -1) throw StateError('The saved expense no longer exists.');
+
+    final updated = expense.copyWith(updatedAt: DateTime.now());
+    _requireUpdated(await _databaseHelper.updateExpense(updated));
+    _expenses[index] = updated;
+    notifyListeners();
+  }
+
+  Future<void> updateIncome(Income income) async {
+    final index = _incomes.indexWhere((item) => item.id == income.id);
+    if (index == -1) throw StateError('The saved income no longer exists.');
+
+    final updated = income.copyWith(updatedAt: DateTime.now());
+    _requireUpdated(await _databaseHelper.updateIncome(updated));
+    _incomes[index] = updated;
+    notifyListeners();
+  }
+
   Future<void> deleteExpense(int id) async {
     final index = _expenses.indexWhere((e) => e.id == id);
     if (index == -1) return;
@@ -291,9 +342,39 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateExpenseCategory(ExpenseCategory category) async {
+    final index = _expenseCategories.indexWhere(
+      (item) => item.id == category.id,
+    );
+    if (index == -1) {
+      throw StateError('The saved category no longer exists.');
+    }
+
+    final updated = category.copyWith(updatedAt: DateTime.now());
+    _requireUpdated(await _databaseHelper.updateExpenseCategory(updated));
+    _expenseCategories[index] = updated;
+    _expenseCategories.sort((a, b) => a.name.compareTo(b.name));
+    notifyListeners();
+  }
+
+  Future<void> updateIncomeCategory(IncomeCategory category) async {
+    final index = _incomeCategories.indexWhere(
+      (item) => item.id == category.id,
+    );
+    if (index == -1) {
+      throw StateError('The saved category no longer exists.');
+    }
+
+    final updated = category.copyWith(updatedAt: DateTime.now());
+    _requireUpdated(await _databaseHelper.updateIncomeCategory(updated));
+    _incomeCategories[index] = updated;
+    _incomeCategories.sort((a, b) => a.name.compareTo(b.name));
+    notifyListeners();
+  }
+
   void _requireUpdated(int affectedRows) {
     if (affectedRows != 1) {
-      throw StateError('The saved entry no longer exists.');
+      throw StateError('The saved record no longer exists.');
     }
   }
 }

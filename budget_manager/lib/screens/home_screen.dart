@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../providers/transaction_provider.dart';
 import '../database/database_helper.dart';
+import '../models/expense_category.dart';
+import '../models/income_category.dart';
 import '../utils/currency.dart';
 import '../widgets/entry_tile.dart';
 import '../widgets/sidebar.dart';
@@ -33,12 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return _selectedMonth.year == now.year && _selectedMonth.month == now.month;
   }
 
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
+      drawerEnableOpenDragGesture: true,
+      drawerEdgeDragWidth: 40,
       drawer: Sidebar(
         activePage: _activePage,
         onPageChanged: (page) {
@@ -50,39 +51,17 @@ class _HomeScreenState extends State<HomeScreen> {
           await _importPreviousData();
         },
       ),
-      body: Stack(
-        children: [
+      body:
           _activePage == 'entries'
               ? _buildEntriesView()
               : _activePage == 'archive'
               ? _buildArchiveView()
               : CategoriesScreen(
-                onAddExpenseCategory: () => _openCategoryForm(context, true),
-                onAddIncomeCategory: () => _openCategoryForm(context, false),
+                onEditExpenseCategory:
+                    (category) => _openExpenseCategoryForm(context, category),
+                onEditIncomeCategory:
+                    (category) => _openIncomeCategoryForm(context, category),
               ),
-          Positioned(
-            top: 12,
-            left: 12,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              ),
-            ),
-          ),
-        ],
-      ),
       floatingActionButton:
           _activePage == 'entries'
               ? Column(
@@ -114,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     heroTag: 'expense_cat_fab',
                     mini: true,
                     backgroundColor: Colors.redAccent,
-                    onPressed: () => _openCategoryForm(context, true),
+                    onPressed: () => _openExpenseCategoryForm(context),
                     child: const Icon(Icons.add, color: Colors.white),
                   ),
                   const SizedBox(height: 8),
@@ -122,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     heroTag: 'income_cat_fab',
                     mini: true,
                     backgroundColor: Colors.green,
-                    onPressed: () => _openCategoryForm(context, false),
+                    onPressed: () => _openIncomeCategoryForm(context),
                     child: const Icon(Icons.add, color: Colors.white),
                   ),
                 ],
@@ -166,11 +145,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openCategoryForm(BuildContext context, bool isExpense) {
+  void _openExpenseCategoryForm(
+    BuildContext context, [
+    ExpenseCategory? category,
+  ]) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CategoryFormScreen(isExpense: isExpense),
+        builder:
+            (_) =>
+                CategoryFormScreen(isExpense: true, expenseCategory: category),
+      ),
+    );
+  }
+
+  void _openIncomeCategoryForm(
+    BuildContext context, [
+    IncomeCategory? category,
+  ]) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) =>
+                CategoryFormScreen(isExpense: false, incomeCategory: category),
       ),
     );
   }
@@ -455,7 +453,6 @@ class _MonthHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 56),
           IconButton(
             icon: const Icon(Icons.chevron_left),
             onPressed: onPreviousMonth,
