@@ -19,6 +19,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _emojiController = TextEditingController();
   final _nameFocusNode = FocusNode();
   final _emojiFocusNode = FocusNode();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -29,48 +30,58 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
     final name = _nameController.text.trim();
     final emoji = _emojiController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a name')));
       return;
     }
 
     if (emoji.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an emoji')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter an emoji')));
       return;
     }
 
     final provider = context.read<TransactionProvider>();
     final now = DateTime.now();
 
-    if (widget.isExpense) {
-      provider.addExpenseCategory(
-        ExpenseCategory(
-          name: name,
-          emoji: emoji,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
-    } else {
-      provider.addIncomeCategory(
-        IncomeCategory(
-          name: name,
-          emoji: emoji,
-          createdAt: now,
-          updatedAt: now,
-        ),
+    setState(() => _isSubmitting = true);
+    try {
+      if (widget.isExpense) {
+        await provider.addExpenseCategory(
+          ExpenseCategory(
+            name: name,
+            emoji: emoji,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      } else {
+        await provider.addIncomeCategory(
+          IncomeCategory(
+            name: name,
+            emoji: emoji,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save category: $error')),
       );
     }
-
-    Navigator.pop(context);
   }
 
   @override
@@ -79,7 +90,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isExpense ? 'Add Expense Category' : 'Add Income Category'),
+        title: Text(
+          widget.isExpense ? 'Add Expense Category' : 'Add Income Category',
+        ),
         centerTitle: true,
       ),
       body: Padding(
@@ -148,7 +161,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: _submit,
+                  onPressed: _isSubmitting ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: accentColor,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -156,7 +169,10 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text('Add', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Add',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
             ],
