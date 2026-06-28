@@ -19,11 +19,17 @@ defaultConfig {
 
 ### 2. Rebuild the APK
 
+The production device is a Samsung S22 Ultra. Always build an **ARM64-only**
+release:
+
 ```bash
 flutter build apk --target-platform android-arm64 --release
 ```
 
 The APK is output to `build/app/outputs/flutter-apk/app-release.apk`.
+It should be approximately 7–8 MB. Do not omit `--target-platform android-arm64`:
+the default command packages ARM64, ARMv7, and x86_64 together and produces an
+unnecessary universal APK of approximately 22 MB.
 
 ### 3. Publish a GitHub release
 
