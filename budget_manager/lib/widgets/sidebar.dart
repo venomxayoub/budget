@@ -4,11 +4,13 @@ import 'package:url_launcher/url_launcher.dart';
 class Sidebar extends StatelessWidget {
   final String activePage;
   final ValueChanged<String> onPageChanged;
+  final Future<void> Function() onImportDatabase;
 
   const Sidebar({
     super.key,
     required this.activePage,
     required this.onPageChanged,
+    required this.onImportDatabase,
   });
 
   @override
@@ -39,6 +41,12 @@ class Sidebar extends StatelessWidget {
               onTap: () => onPageChanged('archive'),
             ),
             const Spacer(),
+            ListTile(
+              leading: const Icon(Icons.restore_page_outlined),
+              title: const Text('Import Previous Data'),
+              subtitle: const Text('Select a legacy .db file'),
+              onTap: onImportDatabase,
+            ),
             _UpdateButton(),
           ],
         ),
@@ -76,16 +84,17 @@ class _NavItem extends StatelessWidget {
           color: isActive ? colorScheme.primary : colorScheme.onSurface,
         ),
       ),
-      trailing: isActive
-          ? Container(
-              width: 4,
-              height: 24,
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            )
-          : null,
+      trailing:
+          isActive
+              ? Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              )
+              : null,
       onTap: onTap,
     );
   }
@@ -96,7 +105,8 @@ class _UpdateButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     const version = '1.0.3';
-    const downloadUrl = 'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
+    const downloadUrl =
+        'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -107,16 +117,17 @@ class _UpdateButton extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'v$version',
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
-              onPressed: () => launchUrl(Uri.parse(downloadUrl), mode: LaunchMode.externalApplication),
+              onPressed:
+                  () => launchUrl(
+                    Uri.parse(downloadUrl),
+                    mode: LaunchMode.externalApplication,
+                  ),
               icon: Icon(Icons.download, size: 18, color: colorScheme.primary),
               label: const Text('Update'),
             ),

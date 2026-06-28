@@ -39,8 +39,13 @@ gh release create v1.0.1 \
 Download the APK from the GitHub release on your Samsung S22 Ultra and open it. Since the APK is signed with the same `keystore.jks`, Android will treat it as an update to the existing install — no data loss.
 
 Your data is also protected by:
-- **Android Auto Backup** — data is automatically backed up to Google Drive
+- **Private app storage** — the database is no longer exposed in shared storage
+- **Android Auto Backup** — the private database is eligible for encrypted device backup
 - **Pre-migration safety** — the app copies your database before any upgrade, and runs migrations atomically
+
+If upgrading from a release that stored data in `/storage/emulated/0/budget_manager`,
+open the sidebar, choose **Import Previous Data**, and select `budget_manager.db`.
+The Android system picker grants access only to that file; broad storage permission is not required.
 
 ## Development
 

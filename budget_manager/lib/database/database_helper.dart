@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -8,16 +9,24 @@ import '../models/income_category.dart';
 import '../models/expense.dart';
 import '../models/income.dart';
 
-const _externalDbDir = '/storage/emulated/0/budget_manager';
+const _legacyExternalDbDir = '/storage/emulated/0/budget_manager';
 const _dbFileName = 'budget_manager.db';
 const _backupFileName = 'budget_manager_backup.db';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   factory DatabaseHelper() => _instance;
-  DatabaseHelper._internal();
+  DatabaseHelper._internal() : _databaseFactory = null, _overridePath = null;
 
-  static Database? _database;
+  DatabaseHelper.forTesting({
+    required DatabaseFactory databaseFactory,
+    required String path,
+  }) : _databaseFactory = databaseFactory,
+       _overridePath = path;
+
+  final DatabaseFactory? _databaseFactory;
+  final String? _overridePath;
+  Database? _database;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -25,31 +34,79 @@ class DatabaseHelper {
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
-    final String dbPath;
-    final String path;
+  Future<void> close() async {
+    await _database?.close();
+    _database = null;
+  }
 
-    if (Platform.isAndroid) {
-      final dir = Directory(_externalDbDir);
-      final canUseExternal = await dir.exists() ||
-          await dir.create(recursive: true).then((_) => true).catchError((_) => false);
+  Future<void> importDatabase(Uint8List bytes) async {
+    if (_overridePath != null) {
+      throw StateError('Database import is unavailable in tests.');
+    }
 
-      if (canUseExternal) {
-        dbPath = _externalDbDir;
-        path = join(_externalDbDir, _dbFileName);
+    final targetPath = join(await getDatabasesPath(), _dbFileName);
+    final importPath = '$targetPath.import';
+    final rollbackPath = '$targetPath.rollback';
+    final importFile = File(importPath);
+    await importFile.writeAsBytes(bytes, flush: true);
 
-        final defaultDbPath = await getDatabasesPath();
-        final defaultDb = File(join(defaultDbPath, _dbFileName));
-        if (await defaultDb.exists() && !await File(path).exists()) {
-          await defaultDb.copy(path);
+    Database? candidate;
+    try {
+      try {
+        candidate = await openReadOnlyDatabase(importPath);
+        final integrity = await candidate.rawQuery('PRAGMA integrity_check');
+        if (integrity.single.values.single != 'ok') {
+          throw const FormatException('The selected database is corrupted.');
         }
-      } else {
-        dbPath = await getDatabasesPath();
-        path = join(dbPath, _dbFileName);
+        final tables = await candidate.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        );
+        final names = tables.map((table) => table['name']).toSet();
+        const requiredTables = {
+          'expense_categories',
+          'income_categories',
+          'expenses',
+          'incomes',
+        };
+        if (!names.containsAll(requiredTables)) {
+          throw const FormatException(
+            'The selected file is not a Budget Manager database.',
+          );
+        }
+      } finally {
+        await candidate?.close();
       }
-    } else {
-      dbPath = await getDatabasesPath();
-      path = join(dbPath, _dbFileName);
+    } catch (_) {
+      if (await importFile.exists()) await importFile.delete();
+      rethrow;
+    }
+
+    await close();
+    final target = File(targetPath);
+    final rollback = File(rollbackPath);
+    try {
+      if (await rollback.exists()) await rollback.delete();
+      if (await target.exists()) await target.rename(rollbackPath);
+      await importFile.rename(targetPath);
+      await database;
+      if (await rollback.exists()) await rollback.delete();
+    } catch (_) {
+      await close();
+      if (await target.exists()) await target.delete();
+      if (await rollback.exists()) await rollback.rename(targetPath);
+      rethrow;
+    } finally {
+      if (await importFile.exists()) await importFile.delete();
+    }
+  }
+
+  Future<Database> _initDatabase() async {
+    final path = _overridePath ?? join(await getDatabasesPath(), _dbFileName);
+    final dbPath = dirname(path);
+
+    if (_overridePath == null) {
+      await Directory(dbPath).create(recursive: true);
+      await _migrateLegacyExternalDatabase(path);
     }
 
     final backupPath = join(dbPath, _backupFileName);
@@ -60,12 +117,39 @@ class DatabaseHelper {
       } catch (_) {}
     }
 
-    return await openDatabase(
+    if (_databaseFactory != null) {
+      return _databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    }
+
+    return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _migrateLegacyExternalDatabase(String internalPath) async {
+    if (!Platform.isAndroid || await File(internalPath).exists()) return;
+
+    final legacyDatabase = File(join(_legacyExternalDbDir, _dbFileName));
+    try {
+      if (!await legacyDatabase.exists()) return;
+      await legacyDatabase.copy(internalPath);
+      await legacyDatabase.delete();
+      final legacyBackup = File(join(_legacyExternalDbDir, _backupFileName));
+      if (await legacyBackup.exists()) await legacyBackup.delete();
+    } on FileSystemException {
+      // Modern Android versions may deny access to the old shared-storage path.
+      // The app continues with its private, Auto Backup-enabled database.
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -93,10 +177,11 @@ class DatabaseHelper {
       CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category_ids TEXT NOT NULL,
-        price REAL NOT NULL,
+        price_cents INTEGER NOT NULL,
         note TEXT NOT NULL,
         created_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        deleted_at TEXT
       )
     ''');
 
@@ -104,31 +189,56 @@ class DatabaseHelper {
       CREATE TABLE incomes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category_ids TEXT NOT NULL,
-        price REAL NOT NULL,
+        price_cents INTEGER NOT NULL,
         note TEXT NOT NULL,
         created_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        deleted_at TEXT
       )
     ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     await db.transaction((txn) async {
-      if (oldVersion < 2) {
+      if (!await _hasColumn(txn, 'expenses', 'deleted_at')) {
         await txn.execute('ALTER TABLE expenses ADD COLUMN deleted_at TEXT');
+      }
+      if (!await _hasColumn(txn, 'incomes', 'deleted_at')) {
         await txn.execute('ALTER TABLE incomes ADD COLUMN deleted_at TEXT');
       }
+      if (!await _hasColumn(txn, 'expenses', 'price_cents')) {
+        await txn.execute(
+          'ALTER TABLE expenses ADD COLUMN price_cents INTEGER',
+        );
+        await txn.execute(
+          'UPDATE expenses SET price_cents = ROUND(price * 100)',
+        );
+      }
+      if (!await _hasColumn(txn, 'incomes', 'price_cents')) {
+        await txn.execute('ALTER TABLE incomes ADD COLUMN price_cents INTEGER');
+        await txn.execute(
+          'UPDATE incomes SET price_cents = ROUND(price * 100)',
+        );
+      }
     });
+  }
+
+  Future<bool> _hasColumn(
+    DatabaseExecutor db,
+    String table,
+    String column,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    return columns.any((entry) => entry['name'] == column);
   }
 
   Future<int> insertExpenseCategory(ExpenseCategory category) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    return await db.insert('expense_categories', {
-      ...category.toMap(),
-      'created_at': now,
-      'updated_at': now,
-    });
+    final values = category.toMap()..remove('id');
+    values['created_at'] = category.createdAt?.toIso8601String() ?? now;
+    values['updated_at'] = category.updatedAt?.toIso8601String() ?? now;
+    return db.insert('expense_categories', values);
   }
 
   Future<List<ExpenseCategory>> getExpenseCategories() async {
@@ -141,10 +251,7 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       'expense_categories',
-      {
-        ...category.toMap(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
+      {...category.toMap(), 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [category.id],
     );
@@ -162,11 +269,10 @@ class DatabaseHelper {
   Future<int> insertIncomeCategory(IncomeCategory category) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    return await db.insert('income_categories', {
-      ...category.toMap(),
-      'created_at': now,
-      'updated_at': now,
-    });
+    final values = category.toMap()..remove('id');
+    values['created_at'] = category.createdAt?.toIso8601String() ?? now;
+    values['updated_at'] = category.updatedAt?.toIso8601String() ?? now;
+    return db.insert('income_categories', values);
   }
 
   Future<List<IncomeCategory>> getIncomeCategories() async {
@@ -179,10 +285,7 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       'income_categories',
-      {
-        ...category.toMap(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
+      {...category.toMap(), 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [category.id],
     );
@@ -200,11 +303,10 @@ class DatabaseHelper {
   Future<int> insertExpense(Expense expense) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    return await db.insert('expenses', {
-      ...expense.toMap(),
-      'created_at': now,
-      'updated_at': now,
-    });
+    final values = expense.toMap()..remove('id');
+    values['created_at'] = expense.createdAt?.toIso8601String() ?? now;
+    values['updated_at'] = expense.updatedAt?.toIso8601String() ?? now;
+    return db.insert('expenses', values);
   }
 
   Future<List<Expense>> getExpenses() async {
@@ -231,10 +333,7 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       'expenses',
-      {
-        ...expense.toMap(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
+      {...expense.toMap(), 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [expense.id],
     );
@@ -245,10 +344,7 @@ class DatabaseHelper {
     final now = DateTime.now().toIso8601String();
     return await db.update(
       'expenses',
-      {
-        'deleted_at': now,
-        'updated_at': now,
-      },
+      {'deleted_at': now, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -259,10 +355,7 @@ class DatabaseHelper {
     final now = DateTime.now().toIso8601String();
     return await db.update(
       'expenses',
-      {
-        'deleted_at': null,
-        'updated_at': now,
-      },
+      {'deleted_at': null, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -270,21 +363,16 @@ class DatabaseHelper {
 
   Future<int> permanentDeleteExpense(int id) async {
     final db = await database;
-    return await db.delete(
-      'expenses',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> insertIncome(Income income) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    return await db.insert('incomes', {
-      ...income.toMap(),
-      'created_at': now,
-      'updated_at': now,
-    });
+    final values = income.toMap()..remove('id');
+    values['created_at'] = income.createdAt?.toIso8601String() ?? now;
+    values['updated_at'] = income.updatedAt?.toIso8601String() ?? now;
+    return db.insert('incomes', values);
   }
 
   Future<List<Income>> getIncomes() async {
@@ -311,10 +399,7 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       'incomes',
-      {
-        ...income.toMap(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
+      {...income.toMap(), 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [income.id],
     );
@@ -325,10 +410,7 @@ class DatabaseHelper {
     final now = DateTime.now().toIso8601String();
     return await db.update(
       'incomes',
-      {
-        'deleted_at': now,
-        'updated_at': now,
-      },
+      {'deleted_at': now, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -339,10 +421,7 @@ class DatabaseHelper {
     final now = DateTime.now().toIso8601String();
     return await db.update(
       'incomes',
-      {
-        'deleted_at': null,
-        'updated_at': now,
-      },
+      {'deleted_at': null, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -350,10 +429,6 @@ class DatabaseHelper {
 
   Future<int> permanentDeleteIncome(int id) async {
     final db = await database;
-    return await db.delete(
-      'incomes',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('incomes', where: 'id = ?', whereArgs: [id]);
   }
 }

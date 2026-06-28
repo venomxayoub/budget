@@ -1,23 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'providers/transaction_provider.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (Platform.isAndroid) {
-    if (await Permission.manageExternalStorage.isGranted) {
-      // already granted
-    } else if (await Permission.manageExternalStorage.request().isGranted) {
-      // user granted
-    } else if (await Permission.storage.request().isGranted) {
-      // fallback for older Android
-    }
-  }
 
   runApp(
     ChangeNotifierProvider(
