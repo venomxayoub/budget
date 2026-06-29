@@ -5,6 +5,8 @@ import '../models/expense_category.dart';
 import '../models/income_category.dart';
 import '../models/debt_profile.dart';
 import '../models/debt_transaction.dart';
+import '../models/subscription.dart';
+import '../models/subscription_status_event.dart';
 import '../database/database_helper.dart';
 
 class EntryItem {
@@ -15,6 +17,8 @@ class EntryItem {
   final List<int> categoryIds;
   final DateTime createdAt;
   final DateTime? deletedAt;
+  final int? subscriptionId;
+  final DateTime? subscriptionScheduledDate;
 
   EntryItem({
     required this.id,
@@ -24,22 +28,31 @@ class EntryItem {
     required this.categoryIds,
     required this.createdAt,
     this.deletedAt,
+    this.subscriptionId,
+    this.subscriptionScheduledDate,
   });
 
   bool get isArchived => deletedAt != null;
 }
 
 class TransactionProvider extends ChangeNotifier {
-  TransactionProvider({DatabaseHelper? databaseHelper})
-    : _databaseHelper = databaseHelper ?? DatabaseHelper();
+  TransactionProvider({
+    DatabaseHelper? databaseHelper,
+    DateTime Function()? clock,
+  }) : _databaseHelper = databaseHelper ?? DatabaseHelper(),
+       _clock = clock ?? DateTime.now;
 
   final DatabaseHelper _databaseHelper;
+  final DateTime Function() _clock;
   List<Expense> _expenses = [];
   List<Income> _incomes = [];
   List<ExpenseCategory> _expenseCategories = [];
   List<IncomeCategory> _incomeCategories = [];
   List<DebtProfile> _debtProfiles = [];
   List<DebtTransaction> _debtTransactions = [];
+  List<Subscription> _subscriptions = [];
+  List<SubscriptionStatusEvent> _subscriptionStatusEvents = [];
+  bool _isProcessingSubscriptions = false;
 
   List<Expense> get expenses => List.unmodifiable(_expenses);
   List<Income> get incomes => List.unmodifiable(_incomes);
@@ -47,6 +60,7 @@ class TransactionProvider extends ChangeNotifier {
       List.unmodifiable(_expenseCategories);
   List<IncomeCategory> get incomeCategories =>
       List.unmodifiable(_incomeCategories);
+  List<Subscription> get subscriptions => List.unmodifiable(_subscriptions);
 
   List<DebtProfile> get debtProfiles {
     final profiles =
@@ -74,6 +88,8 @@ class TransactionProvider extends ChangeNotifier {
             note: e.note,
             categoryIds: e.categoryIds,
             createdAt: e.createdAt!,
+            subscriptionId: e.subscriptionId,
+            subscriptionScheduledDate: e.subscriptionScheduledDate,
           ),
       for (final i in _incomes)
         if (i.deletedAt == null)
@@ -102,6 +118,8 @@ class TransactionProvider extends ChangeNotifier {
             categoryIds: e.categoryIds,
             createdAt: e.createdAt!,
             deletedAt: e.deletedAt,
+            subscriptionId: e.subscriptionId,
+            subscriptionScheduledDate: e.subscriptionScheduledDate,
           ),
       for (final i in _incomes)
         if (i.deletedAt != null)
@@ -131,6 +149,8 @@ class TransactionProvider extends ChangeNotifier {
           categoryIds: item.categoryIds,
           createdAt: item.createdAt!,
           deletedAt: item.deletedAt,
+          subscriptionId: item.subscriptionId,
+          subscriptionScheduledDate: item.subscriptionScheduledDate,
         );
       }
     } else {
@@ -155,6 +175,45 @@ class TransactionProvider extends ChangeNotifier {
       if (profile.id == id) return profile;
     }
     return null;
+  }
+
+  Subscription? getSubscriptionById(int id) {
+    for (final subscription in _subscriptions) {
+      if (subscription.id == id) return subscription;
+    }
+    return null;
+  }
+
+  List<Expense> subscriptionPayments(int subscriptionId) {
+    final payments =
+        _expenses
+            .where(
+              (expense) =>
+                  expense.subscriptionId == subscriptionId &&
+                  expense.deletedAt == null,
+            )
+            .toList()
+          ..sort((a, b) {
+            final byDate = (b.createdAt ?? DateTime(0)).compareTo(
+              a.createdAt ?? DateTime(0),
+            );
+            if (byDate != 0) return byDate;
+            return (b.id ?? 0).compareTo(a.id ?? 0);
+          });
+    return List.unmodifiable(payments);
+  }
+
+  List<SubscriptionStatusEvent> subscriptionStatusEvents(int subscriptionId) {
+    final events =
+        _subscriptionStatusEvents
+            .where((event) => event.subscriptionId == subscriptionId)
+            .toList()
+          ..sort((a, b) {
+            final byDate = b.occurredAt.compareTo(a.occurredAt);
+            if (byDate != 0) return byDate;
+            return (b.id ?? 0).compareTo(a.id ?? 0);
+          });
+    return List.unmodifiable(events);
   }
 
   DebtTransaction? getDebtTransactionById(int id) {
@@ -258,6 +317,9 @@ class TransactionProvider extends ChangeNotifier {
         _incomeCategories = await _databaseHelper.getIncomeCategories();
       }
 
+      await _databaseHelper.processSubscriptionsIfNeeded(_clock());
+      _expenseCategories = await _databaseHelper.getExpenseCategories();
+
       _expenses = [
         ...await _databaseHelper.getExpenses(),
         ...await _databaseHelper.getArchivedExpenses(),
@@ -271,6 +333,9 @@ class TransactionProvider extends ChangeNotifier {
         ...await _databaseHelper.getArchivedDebtProfiles(),
       ];
       _debtTransactions = await _databaseHelper.getDebtTransactions();
+      _subscriptions = await _databaseHelper.getSubscriptions();
+      _subscriptionStatusEvents =
+          await _databaseHelper.getSubscriptionStatusEvents();
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -312,6 +377,136 @@ class TransactionProvider extends ChangeNotifier {
     );
     final id = await _databaseHelper.insertExpense(pending);
     _expenses.insert(0, pending.copyWith(id: id));
+    notifyListeners();
+  }
+
+  Future<void> createSubscription({
+    required String name,
+    required int priceCents,
+    required SubscriptionPeriod period,
+    required DateTime firstRenewalDate,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('A subscription name is required.');
+    }
+    if (priceCents <= 0) {
+      throw ArgumentError('Subscription price must be positive.');
+    }
+    final now = _clock();
+    final today = _dateOnly(now);
+    final firstRenewal = _dateOnly(firstRenewalDate);
+    if (firstRenewal.isBefore(today)) {
+      throw ArgumentError('The first renewal date cannot be in the past.');
+    }
+    await _databaseHelper.createSubscription(
+      subscription: Subscription(
+        name: trimmedName,
+        priceCents: priceCents,
+        period: period,
+        status: SubscriptionStatus.active,
+        renewalAnchorDate: firstRenewal,
+        nextRenewalDate: firstRenewal,
+        createdAt: now,
+        updatedAt: now,
+      ),
+      today: today,
+    );
+    await _refreshSubscriptionData();
+  }
+
+  Future<void> updateSubscription({
+    required int id,
+    required String name,
+    required int priceCents,
+    required SubscriptionPeriod period,
+    required DateTime nextRenewalDate,
+  }) async {
+    final existing = getSubscriptionById(id);
+    if (existing == null) {
+      throw StateError('The subscription no longer exists.');
+    }
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('A subscription name is required.');
+    }
+    if (priceCents <= 0) {
+      throw ArgumentError('Subscription price must be positive.');
+    }
+    final nextRenewal = _dateOnly(nextRenewalDate);
+    final updated = existing.copyWith(
+      name: trimmedName,
+      priceCents: priceCents,
+      period: period,
+      renewalAnchorDate: nextRenewal,
+      nextRenewalDate: nextRenewal,
+      updatedAt: _clock(),
+    );
+    _requireUpdated(await _databaseHelper.updateSubscription(updated));
+    await _refreshSubscriptionData();
+  }
+
+  Future<void> pauseSubscription(int id) => _setSubscriptionStatus(
+    id,
+    SubscriptionStatus.paused,
+    chargeImmediately: false,
+  );
+
+  Future<void> cancelSubscription(int id) => _setSubscriptionStatus(
+    id,
+    SubscriptionStatus.cancelled,
+    chargeImmediately: false,
+  );
+
+  Future<void> reactivateSubscription(int id) => _setSubscriptionStatus(
+    id,
+    SubscriptionStatus.active,
+    chargeImmediately: true,
+  );
+
+  Future<void> _setSubscriptionStatus(
+    int id,
+    SubscriptionStatus status, {
+    required bool chargeImmediately,
+  }) async {
+    final existing = getSubscriptionById(id);
+    if (existing == null) {
+      throw StateError('The subscription no longer exists.');
+    }
+    if (chargeImmediately && existing.status == SubscriptionStatus.active) {
+      throw StateError('The subscription is already active.');
+    }
+    await _databaseHelper.changeSubscriptionStatus(
+      id: id,
+      status: status,
+      now: _clock(),
+      chargeImmediately: chargeImmediately,
+    );
+    await _refreshSubscriptionData();
+  }
+
+  Future<void> processSubscriptionsIfNeeded() async {
+    if (_isProcessingSubscriptions) return;
+    _isProcessingSubscriptions = true;
+    try {
+      final processed = await _databaseHelper.processSubscriptionsIfNeeded(
+        _clock(),
+      );
+      if (processed) await _refreshSubscriptionData();
+    } finally {
+      _isProcessingSubscriptions = false;
+    }
+  }
+
+  Future<void> _refreshSubscriptionData() async {
+    _expenseCategories = await _databaseHelper.getExpenseCategories();
+    _expenses = [
+      ...await _databaseHelper.getExpenses(),
+      ...await _databaseHelper.getArchivedExpenses(),
+    ];
+    _subscriptions = await _databaseHelper.getSubscriptions();
+    _subscriptionStatusEvents =
+        await _databaseHelper.getSubscriptionStatusEvents();
     notifyListeners();
   }
 
@@ -631,3 +826,6 @@ final List<IncomeCategory> defaultIncomeCategories = [
   IncomeCategory(id: 5, name: 'Refund', emoji: '↩️'),
   IncomeCategory(id: 6, name: 'Other', emoji: '📦'),
 ];
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);

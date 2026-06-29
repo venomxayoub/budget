@@ -184,18 +184,19 @@ class DebtProfileDetailScreen extends StatelessWidget {
   }
 
   Future<void> _rename(BuildContext context, String currentName) async {
-    final controller = TextEditingController(text: currentName);
+    var pendingName = currentName;
     final newName = await showDialog<String>(
       context: context,
       builder:
           (dialogContext) => AlertDialog(
             title: const Text('Rename Profile'),
-            content: TextField(
+            content: TextFormField(
               key: const Key('rename-debt-profile-field'),
-              controller: controller,
+              initialValue: currentName,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
-              onSubmitted: (value) {
+              onChanged: (value) => pendingName = value,
+              onFieldSubmitted: (value) {
                 if (value.trim().isNotEmpty) {
                   Navigator.pop(dialogContext, value.trim());
                 }
@@ -208,7 +209,7 @@ class DebtProfileDetailScreen extends StatelessWidget {
               ),
               FilledButton(
                 onPressed: () {
-                  final value = controller.text.trim();
+                  final value = pendingName.trim();
                   if (value.isNotEmpty) Navigator.pop(dialogContext, value);
                 },
                 child: const Text('Rename'),
@@ -216,7 +217,6 @@ class DebtProfileDetailScreen extends StatelessWidget {
             ],
           ),
     );
-    controller.dispose();
     if (newName == null || !context.mounted) return;
     await context.read<TransactionProvider>().renameDebtProfile(
       profileId,

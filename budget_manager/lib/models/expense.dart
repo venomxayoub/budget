@@ -14,6 +14,8 @@ class Expense {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? deletedAt;
+  final int? subscriptionId;
+  final DateTime? subscriptionScheduledDate;
 
   Expense({
     this.id,
@@ -23,6 +25,8 @@ class Expense {
     this.createdAt,
     this.updatedAt,
     this.deletedAt,
+    this.subscriptionId,
+    this.subscriptionScheduledDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -34,6 +38,13 @@ class Expense {
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'deleted_at': deletedAt?.toIso8601String(),
+      'subscription_id': subscriptionId,
+      'subscription_scheduled_date':
+          subscriptionScheduledDate == null
+              ? null
+              : '${subscriptionScheduledDate!.year.toString().padLeft(4, '0')}-'
+                  '${subscriptionScheduledDate!.month.toString().padLeft(2, '0')}-'
+                  '${subscriptionScheduledDate!.day.toString().padLeft(2, '0')}',
     };
   }
 
@@ -58,6 +69,11 @@ class Expense {
           map['deleted_at'] != null
               ? DateTime.parse(map['deleted_at'] as String)
               : null,
+      subscriptionId: map['subscription_id'] as int?,
+      subscriptionScheduledDate:
+          map['subscription_scheduled_date'] == null
+              ? null
+              : DateTime.parse(map['subscription_scheduled_date'] as String),
     );
   }
 
@@ -69,6 +85,8 @@ class Expense {
     DateTime? createdAt,
     DateTime? updatedAt,
     Object? deletedAt = _expenseSentinel,
+    Object? subscriptionId = _expenseSentinel,
+    Object? subscriptionScheduledDate = _expenseSentinel,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -81,6 +99,14 @@ class Expense {
           identical(deletedAt, _expenseSentinel)
               ? this.deletedAt
               : deletedAt as DateTime?,
+      subscriptionId:
+          identical(subscriptionId, _expenseSentinel)
+              ? this.subscriptionId
+              : subscriptionId as int?,
+      subscriptionScheduledDate:
+          identical(subscriptionScheduledDate, _expenseSentinel)
+              ? this.subscriptionScheduledDate
+              : subscriptionScheduledDate as DateTime?,
     );
   }
 }

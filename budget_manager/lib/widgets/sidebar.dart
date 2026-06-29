@@ -40,6 +40,12 @@ class _SidebarState extends State<Sidebar> {
               isActive: widget.activePage == 'entries',
               onTap: () => widget.onPageChanged('entries'),
             ),
+            _NavItem(
+              icon: Icons.autorenew,
+              label: 'Subscriptions',
+              isActive: widget.activePage == 'subscriptions',
+              onTap: () => widget.onPageChanged('subscriptions'),
+            ),
             _UpdateButton(),
             const Spacer(),
             _NavItem(
@@ -148,7 +154,7 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.2.2';
+    const version = '1.3.0';
     const downloadUrl =
         'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
 

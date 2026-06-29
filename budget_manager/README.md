@@ -8,6 +8,149 @@ This is a personal, local-only, single-user application intended to run on one
 personal phone (a Samsung S22 Ultra). It is not designed as a public,
 multi-device, multi-user, or cloud-synchronized product.
 
+## Deterministic Contributor Guide
+
+This section is the operating guide for coding agents, especially smaller
+models. Follow it literally. Do not replace these workflows with a plausible
+alternative: consistency and preservation of user data are more important than
+shorter code or fewer commands.
+
+### Start with the real repository state
+
+Run all Git and release commands from the repository root. Run Flutter checks
+inside `budget_manager` unless the command below says otherwise.
+
+```bash
+git status --short --branch
+git diff --check
+```
+
+The worktree may already contain user changes. Do not reset or overwrite them,
+and do not format or include unrelated files. Read the relevant screen,
+provider method, database method, model, and behavior tests before changing a
+feature.
+
+Repository responsibilities:
+
+| Area | Source of truth |
+| --- | --- |
+| Persistent data and migrations | `lib/database/database_helper.dart` |
+| In-memory state and business operations | `lib/providers/transaction_provider.dart` |
+| Stored record shapes | `lib/models/` |
+| User behavior | `lib/screens/`, `docs/`, and behavior tests under `test/` |
+| Android build and publication | `tools/publish-android-release.sh` |
+
+Do not put persistence directly in a screen, duplicate provider state inside a
+widget, or create a second release workflow.
+
+### Use the correct Flutter SDK
+
+On the primary development machine, use the current SDK at
+`$HOME/.local/share/flutter/bin/flutter`. `$HOME/flutter/bin/flutter` is an
+older SDK and can rewrite `pubspec.lock` to older transitive dependencies.
+
+```bash
+export FLUTTER_BIN="${FLUTTER_BIN:-$HOME/.local/share/flutter/bin/flutter}"
+cd budget_manager
+"$FLUTTER_BIN" pub get
+"$FLUTTER_BIN" analyze --no-pub
+"$FLUTTER_BIN" test --no-pub --concurrency=1
+```
+
+After `pub get`, verify that `pubspec.lock` did not change unless dependency
+changes were explicitly requested. Use a targeted test while developing, then
+run analysis and the complete suite. A failing intended-behavior test is a bug
+signal; do not skip it, weaken its assertion, or rewrite it to match the current
+implementation.
+
+### Preserve these product invariants
+
+Money is stored as integer cents. Never add floating-point money columns or
+perform financial calculations with `double`.
+
+Entries:
+
+- Expenses and incomes share one chronological Entries view but remain
+  separate stored record types and category sets.
+- Editing changes the existing record; it must not create a duplicate or
+  replace its original creation date.
+- Delete means soft-delete to Archive. Entry deletion, restoration, and
+  permanent deletion do not use confirmation dialogs.
+- Archived entries can be restored or permanently deleted.
+
+Categories:
+
+- Expense and income categories are separate. Never use an expense-category ID
+  for an income or the reverse.
+- A fresh database seeds the default categories. Adding one category must not
+  reseed or replace the other category set.
+
+Debts and loans:
+
+- Positive balance means the other person owes the user; negative means the
+  user owes the other person.
+- `gave` increases the balance, `received` decreases it, and `update` sets the
+  complete signed balance rather than applying a difference.
+- Archiving a profile keeps its complete transaction history. An archived
+  profile cannot be renamed or receive new transactions.
+- Debt profile and debt transaction deletion require confirmation.
+
+Subscriptions:
+
+- Creating a subscription always creates one Expense payment immediately.
+- Editing name, price, frequency, or renewal date never creates a payment.
+- Pause and Cancel are distinct states, but both stop renewal processing.
+- Unpause and Uncancel reset the renewal anchor to today, create an immediate
+  payment, and schedule the next renewal from today.
+- The startup/resume processor runs at most once per local calendar day and
+  creates every missed renewal exactly once.
+- Monthly and annual recurrence retains its original day anchor across short
+  months and leap years.
+- A subscription payment is the same Expense object shown in Entries and in
+  subscription history. Archive, restore, edit, and permanent deletion must be
+  reflected in both views.
+- Subscription payments use the automatically created or reused
+  `Subscription` expense category.
+
+Database changes:
+
+- Increase the SQLite database version for every schema change.
+- Add a forward migration and update fresh-database and legacy-migration tests.
+- Preserve existing rows. Never drop user data to make a migration easier.
+- Keep multi-record operations atomic and idempotent. Write completion flags
+  only after all related records commit successfully.
+- Continue accepting valid legacy databases through Import Previous Data.
+
+### Choose the canonical command
+
+| Requested outcome | Command or action |
+| --- | --- |
+| Check one behavior while developing | `"$FLUTTER_BIN" test --no-pub test/<file>_test.dart` |
+| Validate all source changes | `"$FLUTTER_BIN" analyze --no-pub` then the complete test suite |
+| Build and verify a release candidate | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --dry-run` |
+| Publish an Android release | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --notes-file <markdown-file>` |
+
+Do not use `flutter build apk` directly for a release outcome. Do not manually
+upload an APK, create a partial tag, use a short commit SHA, or rename the
+release asset. The script is the only supported path because it performs the
+same architecture, signature, version, clean-master, full-SHA, digest, and
+latest-download checks every time.
+
+Before handing work back:
+
+1. Confirm only intended files changed with `git status --short`.
+2. Run `git diff --check`.
+3. Run targeted tests, full analysis, and the complete test suite.
+4. Report any failing behavior precisely; do not hide an unresolved failure.
+5. Do not claim an APK or release exists unless the canonical script completed
+   and its final verification passed.
+
+### Regression guard
+
+`test/debt_rename_regression_test.dart` protects against a previous bug where
+the debt-profile rename dialog disposed its `TextEditingController` before the
+dialog exit animation finished. Keep this test enabled and passing.
+
 ## Building the APK
 
 Use the release script in dry-run mode from the repository root:
@@ -24,7 +167,7 @@ not match the local installation.
 The resulting file is:
 
 ```text
-build/app/outputs/flutter-apk/app-release.apk
+budget_manager/build/app/outputs/flutter-apk/app-release.apk
 ```
 
 The production device is a Samsung S22 Ultra, so releases must remain
@@ -101,6 +244,9 @@ The Android system picker grants access only to that file; broad storage permiss
 ## Development
 
 ```bash
-flutter run
-flutter analyze
+export FLUTTER_BIN="${FLUTTER_BIN:-$HOME/.local/share/flutter/bin/flutter}"
+cd budget_manager
+"$FLUTTER_BIN" run
+"$FLUTTER_BIN" analyze --no-pub
+"$FLUTTER_BIN" test --no-pub --concurrency=1
 ```
