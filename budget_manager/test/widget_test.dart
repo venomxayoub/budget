@@ -21,10 +21,26 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
 
+  Future<TransactionProvider> loadedProvider() async {
+    final dir = await Directory.systemTemp.createTemp('budget_widget_test_');
+    final db = DatabaseHelper.forTesting(
+      databaseFactory: databaseFactoryFfi,
+      path: path.join(dir.path, 'budget.db'),
+    );
+    final p = TransactionProvider(databaseHelper: db);
+    await p.loadData();
+    addTearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
+    return p;
+  }
+
   testWidgets('App loads home screen', (WidgetTester tester) async {
+    final provider = await tester.runAsync(() => loadedProvider());
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => TransactionProvider(),
+      ChangeNotifierProvider.value(
+        value: provider,
         child: const BudgetManagerApp(),
       ),
     );
@@ -36,9 +52,10 @@ void main() {
   testWidgets('drawer opens from a left-to-right swipe started inward', (
     WidgetTester tester,
   ) async {
+    final provider = await tester.runAsync(() => loadedProvider());
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => TransactionProvider(),
+      ChangeNotifierProvider.value(
+        value: provider,
         child: const BudgetManagerApp(),
       ),
     );
@@ -67,9 +84,10 @@ void main() {
   testWidgets('drawer keeps data controls above bottom navigation links', (
     WidgetTester tester,
   ) async {
+    final provider = await tester.runAsync(() => loadedProvider());
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => TransactionProvider(),
+      ChangeNotifierProvider.value(
+        value: provider,
         child: const BudgetManagerApp(),
       ),
     );
@@ -97,9 +115,10 @@ void main() {
   testWidgets('drawer opens the subscriptions view and New form', (
     WidgetTester tester,
   ) async {
+    final provider = await tester.runAsync(() => loadedProvider());
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => TransactionProvider(),
+      ChangeNotifierProvider.value(
+        value: provider,
         child: const BudgetManagerApp(),
       ),
     );

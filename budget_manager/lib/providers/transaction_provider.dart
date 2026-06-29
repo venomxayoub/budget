@@ -53,6 +53,9 @@ class TransactionProvider extends ChangeNotifier {
   List<Subscription> _subscriptions = [];
   List<SubscriptionStatusEvent> _subscriptionStatusEvents = [];
   bool _isProcessingSubscriptions = false;
+  bool _isLoading = true;
+
+  bool get isLoading => _isLoading;
 
   List<Expense> get expenses => List.unmodifiable(_expenses);
   List<Income> get incomes => List.unmodifiable(_incomes);
@@ -304,6 +307,7 @@ class TransactionProvider extends ChangeNotifier {
           .toList();
 
   Future<void> loadData() async {
+    _isLoading = true;
     _expenseCategories = List.of(defaultExpenseCategories);
     _incomeCategories = List.of(defaultIncomeCategories);
 
@@ -353,6 +357,7 @@ class TransactionProvider extends ChangeNotifier {
       }
     }
 
+    _isLoading = false;
     notifyListeners();
   }
 

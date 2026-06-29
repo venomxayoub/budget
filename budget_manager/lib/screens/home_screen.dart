@@ -65,24 +65,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawerEnableOpenDragGesture: true,
-      // Android's system back gesture owns the very edge of the display.
-      // Keep the drawer drag target wide enough to start just inside it.
-      drawerEdgeDragWidth: _drawerSwipeWidth,
-      drawer: Sidebar(
-        activePage: _activePage,
-        onPageChanged: (page) {
-          setState(() => _activePage = page);
-          Navigator.pop(context);
-        },
-        onImportDatabase: () async {
-          Navigator.pop(context);
-          await _importPreviousData();
-        },
-      ),
-      body: _buildActivePage(),
-      floatingActionButton: _buildFloatingActionButton(),
+    return Consumer<TransactionProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return Scaffold(
+          drawerEnableOpenDragGesture: true,
+          // Android's system back gesture owns the very edge of the display.
+          // Keep the drawer drag target wide enough to start just inside it.
+          drawerEdgeDragWidth: _drawerSwipeWidth,
+          drawer: Sidebar(
+            activePage: _activePage,
+            onPageChanged: (page) {
+              setState(() => _activePage = page);
+              Navigator.pop(context);
+            },
+            onImportDatabase: () async {
+              Navigator.pop(context);
+              await _importPreviousData();
+            },
+          ),
+          body: _buildActivePage(),
+          floatingActionButton: _buildFloatingActionButton(),
+        );
+      },
     );
   }
 
