@@ -43,6 +43,96 @@ Repository responsibilities:
 Do not put persistence directly in a screen, duplicate provider state inside a
 widget, or create a second release workflow.
 
+### Safe change procedure
+
+Smaller models must follow this sequence instead of deciding their own process.
+Do not skip steps because a change looks small.
+
+1. Start from the repository root and inspect the real state:
+
+   ```bash
+   git status --short --branch
+   git diff --check
+   ```
+
+2. Identify the exact area being changed and read the related files first:
+
+   | Change type | Files to read before editing |
+   | --- | --- |
+   | Database schema, migrations, import, persistence | `lib/database/database_helper.dart`, `test/database_helper_test.dart` |
+   | Entry, category, debt, subscription behavior | `lib/providers/transaction_provider.dart`, matching model files, matching behavior tests |
+   | UI forms or list screens | Matching file in `lib/screens/`, widgets in `lib/widgets/`, `test/ui_behavior_test.dart`, `test/widget_test.dart` |
+   | Release, update link, APK naming, versions | `tools/publish-android-release.sh`, `lib/widgets/sidebar.dart`, `android/app/build.gradle.kts`, `pubspec.yaml` |
+   | Dependencies | `pubspec.yaml`, `pubspec.lock`, the imports that use the package |
+
+3. Make the smallest coherent edit:
+
+   - Keep persistence in `DatabaseHelper`.
+   - Keep business rules in `TransactionProvider`.
+   - Keep screens as UI and navigation layers.
+   - Keep money as integer cents.
+   - Preserve existing rows and migrations.
+   - Do not weaken tests to make a failure pass.
+
+4. Add or update tests with the change:
+
+   - Pure business behavior belongs in focused provider/database tests.
+   - User-visible behavior belongs in widget tests.
+   - Every fixed regression should get a test that would have failed before the
+     fix.
+   - Database schema changes must update fresh-database and legacy-migration
+     tests.
+
+5. Run a targeted test while developing:
+
+   ```bash
+   export FLUTTER_BIN="${FLUTTER_BIN:-$HOME/.local/share/flutter/bin/flutter}"
+   cd budget_manager
+   "$FLUTTER_BIN" test --no-pub test/<relevant_test_file>_test.dart
+   cd ..
+   ```
+
+6. Run the canonical full validation before claiming the work is done:
+
+   ```bash
+   FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/check.sh
+   ```
+
+7. Review the final diff:
+
+   ```bash
+   git status --short
+   git diff --check
+   git diff --stat
+   ```
+
+8. Commit only intentional files. If the worktree contains unrelated user
+   changes, stage explicit paths or hunks:
+
+   ```bash
+   git add path/to/file
+   git add -p path/to/mixed-file
+   git commit -m "Short purpose of this change"
+   ```
+
+9. Group commits by purpose:
+
+   - Feature or bug fix
+   - Tests and guardrails
+   - Dependency refresh
+   - Build or release tooling
+   - Version bump and release preparation
+
+10. Push only after validation passes:
+
+   ```bash
+   git push origin master
+   ```
+
+If any command fails, stop and fix the cause. Do not bypass a failing analyzer,
+test, coverage gate, release gate, architecture check, signature check, digest
+check, or download check.
+
 ### Use the correct Flutter SDK
 
 On the primary development machine, use the current SDK at
@@ -128,6 +218,8 @@ Database changes:
 | --- | --- |
 | Check one behavior while developing | `"$FLUTTER_BIN" test --no-pub test/<file>_test.dart` |
 | Validate all source changes | From repo root: `tools/check.sh` |
+| Commit validated work | Stage explicit files or hunks, then `git commit -m "<purpose>"` |
+| Push committed work | From repo root: `git push origin master` |
 | Build and verify a release candidate | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --dry-run` |
 | Publish an Android release | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --notes-file <markdown-file>` |
 
@@ -149,6 +241,50 @@ Before handing work back:
 4. Report any failing behavior precisely; do not hide an unresolved failure.
 5. Do not claim an APK or release exists unless the canonical script completed
    and its final verification passed.
+
+### Release process
+
+Use this process only after the source change is committed, pushed, and
+validated.
+
+1. Confirm the worktree is clean and local `master` matches `origin/master`:
+
+   ```bash
+   git status --short --branch
+   git fetch origin master --tags
+   git rev-parse HEAD origin/master
+   ```
+
+2. Confirm the release tag does not already exist:
+
+   ```bash
+   VERSION="$(sed -nE 's/^version:[[:space:]]*([^+[:space:]]+).*/\1/p' budget_manager/pubspec.yaml)"
+   gh release view "v$VERSION" 2>/dev/null || true
+   git ls-remote --tags origin "refs/tags/v$VERSION"
+   ```
+
+3. Write release notes outside the repository:
+
+   ```bash
+   $EDITOR "/tmp/budget-v$VERSION-notes.md"
+   ```
+
+4. Publish only through the release script:
+
+   ```bash
+   FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" \
+     tools/publish-android-release.sh \
+     --notes-file "/tmp/budget-v$VERSION-notes.md"
+   ```
+
+5. Trust the release only after the script prints `Release published
+   successfully`. The script must verify clean master, full SHA target,
+   ARM64-only APK contents, APK signature, APK version metadata, remote asset
+   digest, and the tag-specific download URL.
+
+If publication creates a partial GitHub release and then fails, delete the
+partial release and tag before retrying. Fix the release script or project
+state first; do not manually upload replacement APKs.
 
 ### Regression guard
 
