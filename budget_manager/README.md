@@ -51,16 +51,17 @@ older SDK and can rewrite `pubspec.lock` to older transitive dependencies.
 
 ```bash
 export FLUTTER_BIN="${FLUTTER_BIN:-$HOME/.local/share/flutter/bin/flutter}"
-cd budget_manager
-"$FLUTTER_BIN" pub get
-"$FLUTTER_BIN" analyze --no-pub
-"$FLUTTER_BIN" test --no-pub --concurrency=1
+tools/check.sh
 ```
 
-After `pub get`, verify that `pubspec.lock` did not change unless dependency
-changes were explicitly requested. Use a targeted test while developing, then
-run analysis and the complete suite. A failing intended-behavior test is a bug
-signal; do not skip it, weaken its assertion, or rewrite it to match the current
+`tools/check.sh` runs `pub get`, analysis, the complete test suite with
+coverage, and the coverage threshold gate. It also refreshes local Flutter
+tooling files with the correct SDK, which avoids stale `.dart_tool` references
+to the older `$HOME/flutter` checkout. After `pub get`, verify that
+`pubspec.lock` did not change unless dependency changes were explicitly
+requested. Use a targeted test while developing, then run the canonical check
+before handing work back. A failing intended-behavior test is a bug signal; do
+not skip it, weaken its assertion, or rewrite it to match the current
 implementation.
 
 ### Preserve these product invariants
@@ -126,7 +127,7 @@ Database changes:
 | Requested outcome | Command or action |
 | --- | --- |
 | Check one behavior while developing | `"$FLUTTER_BIN" test --no-pub test/<file>_test.dart` |
-| Validate all source changes | `"$FLUTTER_BIN" analyze --no-pub` then the complete test suite |
+| Validate all source changes | From repo root: `tools/check.sh` |
 | Build and verify a release candidate | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --dry-run` |
 | Publish an Android release | From repo root: `FLUTTER_BIN="$HOME/.local/share/flutter/bin/flutter" tools/publish-android-release.sh --notes-file <markdown-file>` |
 
@@ -134,13 +135,17 @@ Do not use `flutter build apk` directly for a release outcome. Do not manually
 upload an APK, create a partial tag, use a short commit SHA, or rename the
 release asset. The script is the only supported path because it performs the
 same architecture, signature, version, clean-master, full-SHA, digest, and
-latest-download checks every time.
+tag-specific download checks every time.
+
+GitHub Actions runs `tools/check.sh` on pull requests and pushes to `master`.
+If local and CI results disagree, treat CI as a signal to inspect environment
+drift rather than bypassing the failing gate.
 
 Before handing work back:
 
 1. Confirm only intended files changed with `git status --short`.
 2. Run `git diff --check`.
-3. Run targeted tests, full analysis, and the complete test suite.
+3. Run targeted tests while developing, then `tools/check.sh`.
 4. Report any failing behavior precisely; do not hide an unresolved failure.
 5. Do not claim an APK or release exists unless the canonical script completed
    and its final verification passed.
@@ -164,11 +169,8 @@ then builds and verifies the signed ARM64-only APK. Set `FLUTTER_BIN`,
 `JAVA_HOME`, or `ANDROID_SDK_ROOT` only when automatic toolchain discovery does
 not match the local installation.
 
-The resulting file is:
-
-```text
-budget_manager/build/app/outputs/flutter-apk/app-release.apk
-```
+The resulting APK at `build/app/outputs/flutter-apk/app-release.apk` is
+uploaded to the release as `BudgetManager-v{version}.apk`.
 
 The production device is a Samsung S22 Ultra, so releases must remain
 ARM64-only. Do not remove `--target-platform android-arm64`; a universal APK
@@ -224,9 +226,9 @@ tools/publish-android-release.sh \
 ```
 
 The script derives the `v<version>` tag, targets the full `origin/master`
-commit SHA, uploads the artifact as `app-release.apk`, confirms the remote
-digest, and verifies the in-app updater's latest-download URL. The release
-artifact should be approximately 7–8 MB.
+commit SHA, uploads the artifact as `BudgetManager-v{version}.apk`,
+confirms the remote digest, and verifies the in-app updater's tag-specific
+download URL. The release artifact should be approximately 7–8 MB.
 
 ### 4. Install on device
 
@@ -247,6 +249,6 @@ The Android system picker grants access only to that file; broad storage permiss
 export FLUTTER_BIN="${FLUTTER_BIN:-$HOME/.local/share/flutter/bin/flutter}"
 cd budget_manager
 "$FLUTTER_BIN" run
-"$FLUTTER_BIN" analyze --no-pub
-"$FLUTTER_BIN" test --no-pub --concurrency=1
+cd ..
+tools/check.sh
 ```
