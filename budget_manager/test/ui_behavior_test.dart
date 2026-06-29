@@ -215,7 +215,7 @@ void main() {
     final entry = fixture.provider.entries.single;
     await _pumpScreen(tester, fixture, EntryDetailScreen(entry: entry));
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete'));
+    await tester.tap(find.text('Delete'));
     await _settleAsync(tester);
 
     expect(find.byType(AlertDialog), findsNothing);
@@ -241,14 +241,14 @@ void main() {
     var archived = fixture.provider.archivedEntries.single;
     await _pumpScreen(tester, fixture, EntryDetailScreen(entry: archived));
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Restore'));
+    await tester.tap(find.text('Restore'));
     await _settleAsync(tester);
     expect(fixture.provider.entries.single.id, id);
 
     await tester.runAsync(() => fixture.provider.deleteExpense(id));
     archived = fixture.provider.archivedEntries.single;
     await _pumpScreen(tester, fixture, EntryDetailScreen(entry: archived));
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Forever'));
+    await tester.tap(find.text('Delete Forever'));
     await _settleAsync(tester);
     expect(fixture.provider.entries, isEmpty);
     expect(fixture.provider.archivedEntries, isEmpty);
@@ -495,7 +495,7 @@ void main() {
     expect(find.text('Expense'), findsOneWidget);
     expect(find.text(r'-$18.75'), findsOneWidget);
     expect(find.text('🍕  Food'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Delete'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
   });
 
   testWidgets('drawer navigation exposes every user data area', (tester) async {
