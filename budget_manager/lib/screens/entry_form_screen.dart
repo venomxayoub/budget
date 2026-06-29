@@ -99,6 +99,8 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
           deletedAt: existing?.deletedAt,
+          subscriptionId: existing?.subscriptionId,
+          subscriptionScheduledDate: existing?.subscriptionScheduledDate,
         );
         if (existing == null) {
           await provider.addExpense(expense);

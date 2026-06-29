@@ -24,26 +24,41 @@ void main() {
 
   tearDown(() => temporaryDirectory.delete(recursive: true));
 
-  test('fresh database has archive and integer-cent columns', () async {
+  test('fresh database has entry, debt, and subscription schema', () async {
     final helper = _testHelper(databasePath);
     final database = await helper.database;
 
     final columns = await database.rawQuery('PRAGMA table_info(expenses)');
     final names = columns.map((column) => column['name']).toSet();
 
-    expect(names, containsAll(<String>{'deleted_at', 'price_cents'}));
+    expect(
+      names,
+      containsAll(<String>{
+        'deleted_at',
+        'price_cents',
+        'subscription_id',
+        'subscription_scheduled_date',
+        'subscription_charge_key',
+      }),
+    );
 
     final tables = await database.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
     );
     expect(
       tables.map((table) => table['name']),
-      containsAll(<String>{'debt_profiles', 'debt_transactions'}),
+      containsAll(<String>{
+        'debt_profiles',
+        'debt_transactions',
+        'subscriptions',
+        'subscription_status_events',
+        'app_metadata',
+      }),
     );
     await helper.close();
   });
 
-  test('version 4 migration adds debt tables without changing data', () async {
+  test('version 4 migration adds later tables without changing data', () async {
     final legacy = await databaseFactoryFfi.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
@@ -63,7 +78,13 @@ void main() {
 
     expect(
       tables.map((table) => table['name']),
-      containsAll(<String>{'debt_profiles', 'debt_transactions'}),
+      containsAll(<String>{
+        'debt_profiles',
+        'debt_transactions',
+        'subscriptions',
+        'subscription_status_events',
+        'app_metadata',
+      }),
     );
     expect((await helper.getExpenseCategories()).single.name, 'Food');
     expect((await helper.getIncomeCategories()).single.name, 'Salary');

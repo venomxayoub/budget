@@ -10,11 +10,13 @@ import '../models/expense.dart';
 import '../models/income.dart';
 import '../models/debt_profile.dart';
 import '../models/debt_transaction.dart';
+import '../models/subscription.dart';
+import '../models/subscription_status_event.dart';
 
 const _legacyExternalDbDir = '/storage/emulated/0/budget_manager';
 const _dbFileName = 'budget_manager.db';
 const _backupFileName = 'budget_manager_backup.db';
-const _databaseVersion = 5;
+const _databaseVersion = 6;
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -184,7 +186,10 @@ class DatabaseHelper {
         note TEXT NOT NULL,
         created_at TEXT,
         updated_at TEXT,
-        deleted_at TEXT
+        deleted_at TEXT,
+        subscription_id INTEGER,
+        subscription_scheduled_date TEXT,
+        subscription_charge_key TEXT
       )
     ''');
 
@@ -201,6 +206,7 @@ class DatabaseHelper {
     ''');
 
     await _createDebtTables(db);
+    await _createSubscriptionTables(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -234,6 +240,24 @@ class DatabaseHelper {
       if (oldVersion < 5) {
         await _createDebtTables(txn);
       }
+      if (oldVersion < 6) {
+        if (!await _hasColumn(txn, 'expenses', 'subscription_id')) {
+          await txn.execute(
+            'ALTER TABLE expenses ADD COLUMN subscription_id INTEGER',
+          );
+        }
+        if (!await _hasColumn(txn, 'expenses', 'subscription_scheduled_date')) {
+          await txn.execute(
+            'ALTER TABLE expenses ADD COLUMN subscription_scheduled_date TEXT',
+          );
+        }
+        if (!await _hasColumn(txn, 'expenses', 'subscription_charge_key')) {
+          await txn.execute(
+            'ALTER TABLE expenses ADD COLUMN subscription_charge_key TEXT',
+          );
+        }
+        await _createSubscriptionTables(txn);
+      }
     });
   }
 
@@ -265,6 +289,47 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_debt_transactions_profile_chronological
       ON debt_transactions (profile_id, created_at, id)
+    ''');
+  }
+
+  Future<void> _createSubscriptionTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price_cents INTEGER NOT NULL CHECK (price_cents > 0),
+        period TEXT NOT NULL CHECK (period IN ('weekly', 'monthly', 'annual')),
+        status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'cancelled')),
+        renewal_anchor_date TEXT NOT NULL,
+        next_renewal_date TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS subscription_status_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscription_id INTEGER NOT NULL,
+        from_status TEXT,
+        to_status TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        FOREIGN KEY (subscription_id) REFERENCES subscriptions (id)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_subscription_charge
+      ON expenses (subscription_charge_key)
+      WHERE subscription_charge_key IS NOT NULL
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_subscription_status_events_history
+      ON subscription_status_events (subscription_id, occurred_at, id)
     ''');
   }
 
@@ -679,5 +744,292 @@ class DatabaseHelper {
       };
     }
     return balance;
+  }
+
+  Future<List<Subscription>> getSubscriptions() async {
+    final db = await database;
+    final maps = await db.query(
+      'subscriptions',
+      orderBy:
+          "CASE status WHEN 'active' THEN 0 ELSE 1 END, "
+          'next_renewal_date ASC, updated_at DESC, id DESC',
+    );
+    return maps.map(Subscription.fromMap).toList();
+  }
+
+  Future<List<SubscriptionStatusEvent>> getSubscriptionStatusEvents() async {
+    final db = await database;
+    final maps = await db.query(
+      'subscription_status_events',
+      orderBy: 'occurred_at DESC, id DESC',
+    );
+    return maps.map(SubscriptionStatusEvent.fromMap).toList();
+  }
+
+  Future<int> createSubscription({
+    required Subscription subscription,
+    required DateTime today,
+  }) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final values = subscription.toMap()..remove('id');
+      final id = await txn.insert('subscriptions', values);
+      final eventId = await txn.insert(
+        'subscription_status_events',
+        SubscriptionStatusEvent(
+            subscriptionId: id,
+            fromStatus: null,
+            toStatus: SubscriptionStatus.active,
+            occurredAt: subscription.createdAt ?? today,
+          ).toMap()
+          ..remove('id'),
+      );
+      await _insertSubscriptionPayment(
+        txn,
+        subscription: subscription.copyWith(id: id),
+        scheduledDate: today,
+        now: subscription.createdAt ?? today,
+        chargeKey: 'creation:$id:$eventId',
+      );
+
+      if (!_dateOnly(subscription.nextRenewalDate).isAfter(_dateOnly(today))) {
+        final next = _advanceRenewal(
+          subscription.nextRenewalDate,
+          subscription.renewalAnchorDate,
+          subscription.period,
+        );
+        await txn.update(
+          'subscriptions',
+          {
+            'next_renewal_date': _dateToStorage(next),
+            'updated_at': (subscription.updatedAt ?? today).toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+      return id;
+    });
+  }
+
+  Future<int> updateSubscription(Subscription subscription) async {
+    final db = await database;
+    final values = subscription.toMap()..remove('id');
+    return db.update(
+      'subscriptions',
+      values,
+      where: 'id = ?',
+      whereArgs: [subscription.id],
+    );
+  }
+
+  Future<void> changeSubscriptionStatus({
+    required int id,
+    required SubscriptionStatus status,
+    required DateTime now,
+    required bool chargeImmediately,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'subscriptions',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw StateError('The subscription no longer exists.');
+      }
+      final current = Subscription.fromMap(rows.single);
+      if (current.status == status) return;
+
+      final today = _dateOnly(now);
+      var updated = current.copyWith(status: status, updatedAt: now);
+      if (chargeImmediately) {
+        updated = updated.copyWith(
+          renewalAnchorDate: today,
+          nextRenewalDate: _advanceRenewal(today, today, current.period),
+        );
+      }
+      final values = updated.toMap()..remove('id');
+      final affected = await txn.update(
+        'subscriptions',
+        values,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (affected != 1) {
+        throw StateError('The subscription no longer exists.');
+      }
+      final eventId = await txn.insert(
+        'subscription_status_events',
+        SubscriptionStatusEvent(
+            subscriptionId: id,
+            fromStatus: current.status,
+            toStatus: status,
+            occurredAt: now,
+          ).toMap()
+          ..remove('id'),
+      );
+      if (chargeImmediately) {
+        await _insertSubscriptionPayment(
+          txn,
+          subscription: updated,
+          scheduledDate: today,
+          now: now,
+          chargeKey: 'reactivation:$id:$eventId',
+        );
+      }
+    });
+  }
+
+  Future<bool> processSubscriptionsIfNeeded(DateTime now) async {
+    final db = await database;
+    final today = _dateOnly(now);
+    final todayKey = _dateToStorage(today);
+    return db.transaction((txn) async {
+      final metadata = await txn.query(
+        'app_metadata',
+        columns: const ['value'],
+        where: 'key = ?',
+        whereArgs: const ['last_subscription_check_date'],
+        limit: 1,
+      );
+      if (metadata.isNotEmpty && metadata.single['value'] == todayKey) {
+        return false;
+      }
+
+      final rows = await txn.query(
+        'subscriptions',
+        where: "status = 'active' AND next_renewal_date <= ?",
+        whereArgs: [todayKey],
+        orderBy: 'next_renewal_date ASC, id ASC',
+      );
+      for (final row in rows) {
+        var subscription = Subscription.fromMap(row);
+        var dueDate = _dateOnly(subscription.nextRenewalDate);
+        while (!dueDate.isAfter(today)) {
+          final chargeKey =
+              'renewal:${subscription.id}:${_dateToStorage(dueDate)}';
+          final existing = await txn.query(
+            'expenses',
+            columns: const ['id'],
+            where: 'subscription_charge_key = ?',
+            whereArgs: [chargeKey],
+            limit: 1,
+          );
+          if (existing.isEmpty) {
+            await _insertSubscriptionPayment(
+              txn,
+              subscription: subscription,
+              scheduledDate: dueDate,
+              now: now,
+              chargeKey: chargeKey,
+            );
+          }
+          dueDate = _advanceRenewal(
+            dueDate,
+            subscription.renewalAnchorDate,
+            subscription.period,
+          );
+        }
+        subscription = subscription.copyWith(
+          nextRenewalDate: dueDate,
+          updatedAt: now,
+        );
+        await txn.update(
+          'subscriptions',
+          subscription.toMap()..remove('id'),
+          where: 'id = ?',
+          whereArgs: [subscription.id],
+        );
+      }
+
+      await txn.insert('app_metadata', {
+        'key': 'last_subscription_check_date',
+        'value': todayKey,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      return true;
+    });
+  }
+
+  Future<void> _insertSubscriptionPayment(
+    DatabaseExecutor db, {
+    required Subscription subscription,
+    required DateTime scheduledDate,
+    required DateTime now,
+    required String chargeKey,
+  }) async {
+    final categoryId = await _ensureSubscriptionCategory(db, now);
+    await db.insert('expenses', {
+      'category_ids': '[$categoryId]',
+      'price_cents': subscription.priceCents,
+      'note': subscription.name,
+      'created_at': _dateOnly(scheduledDate).toIso8601String(),
+      'updated_at': now.toIso8601String(),
+      'deleted_at': null,
+      'subscription_id': subscription.id,
+      'subscription_scheduled_date': _dateToStorage(scheduledDate),
+      'subscription_charge_key': chargeKey,
+    });
+  }
+
+  Future<int> _ensureSubscriptionCategory(
+    DatabaseExecutor db,
+    DateTime now,
+  ) async {
+    final existing = await db.query(
+      'expense_categories',
+      columns: const ['id'],
+      where: 'LOWER(TRIM(name)) = ?',
+      whereArgs: const ['subscription'],
+      orderBy: 'id ASC',
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return existing.single['id'] as int;
+    return db.insert('expense_categories', {
+      'name': 'Subscription',
+      'emoji': '🔁',
+      'created_at': now.toIso8601String(),
+      'updated_at': now.toIso8601String(),
+    });
+  }
+}
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+String _dateToStorage(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+DateTime _advanceRenewal(
+  DateTime current,
+  DateTime anchor,
+  SubscriptionPeriod period,
+) {
+  switch (period) {
+    case SubscriptionPeriod.weekly:
+      return _dateOnly(current).add(const Duration(days: 7));
+    case SubscriptionPeriod.monthly:
+      final firstOfFollowingMonth = DateTime(current.year, current.month + 1);
+      final lastDay =
+          DateTime(
+            firstOfFollowingMonth.year,
+            firstOfFollowingMonth.month + 1,
+            0,
+          ).day;
+      final day = anchor.day > lastDay ? lastDay : anchor.day;
+      return DateTime(
+        firstOfFollowingMonth.year,
+        firstOfFollowingMonth.month,
+        day,
+      );
+    case SubscriptionPeriod.annual:
+      final year = current.year + 1;
+      final lastDay = DateTime(year, anchor.month + 1, 0).day;
+      final day = anchor.day > lastDay ? lastDay : anchor.day;
+      return DateTime(year, anchor.month, day);
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +18,7 @@ import 'categories_screen.dart';
 import 'category_form_screen.dart';
 import 'debt_profiles_screen.dart';
 import 'archived_debt_profiles_screen.dart';
+import 'subscriptions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,7 +27,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _drawerSwipeWidth = 96.0;
 
   String _activePage = 'entries';
@@ -37,6 +40,27 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _isCurrentMonth {
     final now = DateTime.now();
     return _selectedMonth.year == now.year && _selectedMonth.month == now.month;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      unawaited(
+        context.read<TransactionProvider>().processSubscriptionsIfNeeded(),
+      );
+    }
   }
 
   @override
@@ -70,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
           (category) => _openIncomeCategoryForm(context, category),
     ),
     'debts' => const DebtProfilesScreen(),
+    'subscriptions' => const SubscriptionsScreen(),
     'archive_entries' => _buildArchiveView(),
     'archive_debt_profiles' => const ArchivedDebtProfilesScreen(),
     _ => _buildEntriesView(),

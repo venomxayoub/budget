@@ -12,6 +12,9 @@ import 'package:budget_manager/screens/entry_form_screen.dart';
 import 'package:budget_manager/models/debt_transaction.dart';
 import 'package:budget_manager/screens/debt_profile_detail_screen.dart';
 import 'package:budget_manager/screens/debt_transaction_detail_screen.dart';
+import 'package:budget_manager/models/subscription.dart';
+import 'package:budget_manager/screens/subscription_detail_screen.dart';
+import 'package:budget_manager/screens/subscription_form_screen.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -48,6 +51,7 @@ void main() {
     expect(find.text('Categories'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
     expect(find.text('Debts & Loans'), findsOneWidget);
+    expect(find.text('Subscriptions'), findsOneWidget);
 
     await tester.tap(find.text('Archive'));
     await tester.pumpAndSettle();
@@ -58,6 +62,105 @@ void main() {
     await tester.tap(find.text('Debt Profiles'));
     await tester.pumpAndSettle();
     expect(find.text('Archived Debt Profiles'), findsOneWidget);
+  });
+
+  testWidgets('drawer opens the subscriptions view and New form', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => TransactionProvider(),
+        child: const BudgetManagerApp(),
+      ),
+    );
+
+    await tester.dragFrom(const Offset(64, 300), const Offset(300, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Subscriptions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No subscriptions yet'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('new-subscription')));
+    await tester.pumpAndSettle();
+    expect(find.text('New Subscription'), findsOneWidget);
+    expect(find.byKey(const Key('subscription-name')), findsOneWidget);
+    expect(find.byKey(const Key('subscription-price')), findsOneWidget);
+    expect(find.byKey(const Key('subscription-period')), findsOneWidget);
+    expect(find.byKey(const Key('subscription-renewal-date')), findsOneWidget);
+  });
+
+  testWidgets('subscription edit form is prefilled', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => TransactionProvider(),
+        child: MaterialApp(
+          home: SubscriptionFormScreen(
+            subscription: Subscription(
+              id: 4,
+              name: 'Music',
+              priceCents: 999,
+              period: SubscriptionPeriod.annual,
+              status: SubscriptionStatus.active,
+              renewalAnchorDate: DateTime(2026, 8, 20),
+              nextRenewalDate: DateTime(2026, 8, 20),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('9.99'), findsOneWidget);
+    expect(find.text('Annual'), findsOneWidget);
+    expect(find.text('Save Changes'), findsOneWidget);
+  });
+
+  testWidgets('subscription detail status and payment deletion are shared', (
+    WidgetTester tester,
+  ) async {
+    final fixture = (await tester.runAsync(_createDebtFixture))!;
+    addTearDown(fixture.dispose);
+    await tester.runAsync(
+      () => fixture.provider.createSubscription(
+        name: 'Video',
+        priceCents: 1499,
+        period: SubscriptionPeriod.monthly,
+        firstRenewalDate: DateTime.now().add(const Duration(days: 10)),
+      ),
+    );
+    final subscriptionId = fixture.provider.subscriptions.single.id!;
+    final paymentId =
+        fixture.provider.subscriptionPayments(subscriptionId).single.id!;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: fixture.provider,
+        child: MaterialApp(
+          home: SubscriptionDetailScreen(subscriptionId: subscriptionId),
+        ),
+      ),
+    );
+
+    expect(find.text('History'), findsOneWidget);
+    expect(find.text('Payment'), findsOneWidget);
+    expect(find.byKey(const Key('pause-subscription')), findsOneWidget);
+    expect(find.byKey(const Key('cancel-subscription')), findsOneWidget);
+
+    await tester.tap(find.byKey(Key('delete-subscription-payment-$paymentId')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Payment?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fixture.provider.entries, isEmpty);
+    expect(fixture.provider.subscriptionPayments(subscriptionId), isEmpty);
+    expect(find.text('Payment'), findsNothing);
   });
 
   testWidgets('entry edit form is prefilled', (WidgetTester tester) async {
