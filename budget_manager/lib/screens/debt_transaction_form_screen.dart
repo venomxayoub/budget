@@ -103,6 +103,7 @@ class _DebtTransactionFormScreenState extends State<DebtTransactionFormScreen> {
                   ),
                 ),
               ],
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: _isUpdate ? 'New absolute balance' : 'Amount',
                 prefixText: r'$ ',
@@ -132,10 +133,12 @@ class _DebtTransactionFormScreenState extends State<DebtTransactionFormScreen> {
               key: const Key('debt-transaction-note'),
               controller: _noteController,
               maxLines: 3,
+              textInputAction: TextInputAction.done,
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
                 border: OutlineInputBorder(),
               ),
+              onFieldSubmitted: (_) => _submit(),
             ),
           ],
         ),

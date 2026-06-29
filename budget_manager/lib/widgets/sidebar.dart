@@ -43,6 +43,12 @@ class _SidebarState extends State<Sidebar> {
               onTap: () => widget.onPageChanged('entries'),
             ),
             _NavItem(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Debts & Loans',
+              isActive: widget.activePage == 'debts',
+              onTap: () => widget.onPageChanged('debts'),
+            ),
+            _NavItem(
               icon: Icons.autorenew,
               label: 'Subscriptions',
               isActive: widget.activePage == 'subscriptions',
@@ -53,12 +59,6 @@ class _SidebarState extends State<Sidebar> {
               label: 'Categories',
               isActive: widget.activePage == 'categories',
               onTap: () => widget.onPageChanged('categories'),
-            ),
-            _NavItem(
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Debts & Loans',
-              isActive: widget.activePage == 'debts',
-              onTap: () => widget.onPageChanged('debts'),
             ),
             ExpansionTile(
               key: const Key('archive-navigation'),

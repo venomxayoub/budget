@@ -18,6 +18,7 @@ import 'categories_screen.dart';
 import 'category_form_screen.dart';
 import 'debt_profiles_screen.dart';
 import 'archived_debt_profiles_screen.dart';
+import 'archived_entries_screen.dart';
 import 'subscriptions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -102,10 +103,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           (category) => _openExpenseCategoryForm(context, category),
       onEditIncomeCategory:
           (category) => _openIncomeCategoryForm(context, category),
+      onNewExpenseCategory: () => _openExpenseCategoryForm(context),
+      onNewIncomeCategory: () => _openIncomeCategoryForm(context),
     ),
     'debts' => const DebtProfilesScreen(),
     'subscriptions' => const SubscriptionsScreen(),
-    'archive_entries' => _buildArchiveView(),
+    'archive_entries' => const ArchivedEntriesScreen(),
     'archive_debt_profiles' => const ArchivedDebtProfilesScreen(),
     _ => _buildEntriesView(),
   };
@@ -133,27 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       );
     }
-    if (_activePage != 'categories') return null;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FloatingActionButton(
-          heroTag: 'expense_cat_fab',
-          mini: true,
-          backgroundColor: Colors.redAccent,
-          onPressed: () => _openExpenseCategoryForm(context),
-          child: const Icon(Icons.add, color: Colors.white),
-        ),
-        const SizedBox(height: 8),
-        FloatingActionButton(
-          heroTag: 'income_cat_fab',
-          mini: true,
-          backgroundColor: Colors.green,
-          onPressed: () => _openIncomeCategoryForm(context),
-          child: const Icon(Icons.add, color: Colors.white),
-        ),
-      ],
-    );
+    return null;
   }
 
   Future<void> _importPreviousData() async {
@@ -368,90 +351,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
 
-  Widget _buildArchiveView() {
-    final provider = context.watch<TransactionProvider>();
-    final entries = provider.archivedEntries;
-    final expenseCatMap = provider.expenseCategoryMap;
-    final incomeCatMap = provider.incomeCategoryMap;
+class _DayStatusBar extends StatelessWidget {
+  final String dayLabel;
+  final DateTime date;
+  final List<EntryItem> entries;
 
-    final groupedEntries = <String, List<EntryItem>>{};
-    for (final entry in entries) {
-      final key = DateFormat('yyyy-MM-dd').format(entry.deletedAt!);
-      groupedEntries.putIfAbsent(key, () => []).add(entry);
+  const _DayStatusBar({
+    required this.dayLabel,
+    required this.date,
+    required this.entries,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    var totalExpense = 0;
+    var totalIncome = 0;
+    for (final e in entries) {
+      if (e.isExpense) {
+        totalExpense += e.amountCents;
+      } else {
+        totalIncome += e.amountCents;
+      }
     }
 
-    final sortedDays =
-        groupedEntries.keys.toList()..sort((a, b) => b.compareTo(a));
-
-    if (entries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.archive_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Row(
+        children: [
+          Text(
+            dayLabel,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'No archived entries',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
+          ),
+          const Spacer(),
+          if (totalIncome > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Text(
+                '+${formatCurrency(totalIncome)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green,
+                ),
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: sortedDays.length,
-      itemBuilder: (context, dayIndex) {
-        final day = sortedDays[dayIndex];
-        final dayEntries = groupedEntries[day]!;
-        final date = DateTime.parse(day);
-        final isToday = _isSameDay(date, DateTime.now());
-        final isYesterday = _isSameDay(
-          date,
-          DateTime.now().subtract(const Duration(days: 1)),
-        );
-
-        String dayLabel;
-        if (isToday) {
-          dayLabel = 'Today';
-        } else if (isYesterday) {
-          dayLabel = 'Yesterday';
-        } else {
-          dayLabel = DateFormat('EEEE, MMM d').format(date);
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DayStatusBar(dayLabel: dayLabel, date: date, entries: dayEntries),
-            ...List.generate(dayEntries.length, (i) {
-              final entry = dayEntries[i];
-              final catMap = entry.isExpense ? expenseCatMap : incomeCatMap;
-
-              return EntryTile(
-                entry: entry,
-                categoryMap: catMap,
-                isOdd: i.isOdd,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => EntryDetailScreen(entry: entry),
-                    ),
-                  );
-                },
-              );
-            }),
-          ],
-        );
-      },
+          if (totalExpense > 0)
+            Text(
+              '-${formatCurrency(totalExpense)}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.redAccent,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -541,72 +504,6 @@ class _MonthHeader extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Colors.redAccent,
                 ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DayStatusBar extends StatelessWidget {
-  final String dayLabel;
-  final DateTime date;
-  final List<EntryItem> entries;
-
-  const _DayStatusBar({
-    required this.dayLabel,
-    required this.date,
-    required this.entries,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    var totalExpense = 0;
-    var totalIncome = 0;
-    for (final e in entries) {
-      if (e.isExpense) {
-        totalExpense += e.amountCents;
-      } else {
-        totalIncome += e.amountCents;
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-      child: Row(
-        children: [
-          Text(
-            dayLabel,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const Spacer(),
-          if (totalIncome > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: Text(
-                '+${formatCurrency(totalIncome)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.green,
-                ),
-              ),
-            ),
-          if (totalExpense > 0)
-            Text(
-              '-${formatCurrency(totalExpense)}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.redAccent,
               ),
             ),
         ],

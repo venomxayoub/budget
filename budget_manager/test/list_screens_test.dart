@@ -24,6 +24,8 @@ void main() {
       CategoriesScreen(
         onEditExpenseCategory: (category) => edited = category,
         onEditIncomeCategory: (category) => edited = category,
+        onNewExpenseCategory: () {},
+        onNewIncomeCategory: () {},
       ),
     );
 
