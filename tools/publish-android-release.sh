@@ -105,7 +105,7 @@ if [[ "$DRY_RUN" == false ]]; then
   NOTES_FILE="$(cd "$(dirname "$NOTES_FILE")" && pwd)/$(basename "$NOTES_FILE")"
 fi
 
-for command in git unzip sha256sum sed sort find; do
+for command in git unzip sha256sum sed sort find cp; do
   require_command "$command"
 done
 if [[ "$DRY_RUN" == false ]]; then
@@ -254,8 +254,11 @@ if [[ "$DRY_RUN" == true ]]; then
   exit 0
 fi
 
-COMBINED_NOTES="$(mktemp)"
-trap 'rm -f "$COMBINED_NOTES"' EXIT
+PUBLISH_DIR="$(mktemp -d)"
+trap 'rm -rf "$PUBLISH_DIR"' EXIT
+COMBINED_NOTES="$PUBLISH_DIR/release-notes.md"
+VERSIONED_APK_PATH="$PUBLISH_DIR/$VERSIONED_ASSET_NAME"
+cp "$APK_PATH" "$VERSIONED_APK_PATH"
 {
   cat "$NOTES_FILE"
   printf '\n\n### Build\n\n'
@@ -270,7 +273,7 @@ gh release create "$TAG" \
   --target "$HEAD_SHA" \
   --title "$TAG" \
   --notes-file "$COMBINED_NOTES" \
-  "$APK_PATH#$VERSIONED_ASSET_NAME"
+  "$VERSIONED_APK_PATH"
 
 log "Verifying published release"
 PUBLISHED_TARGET="$(gh release view "$TAG" --repo "$REPOSITORY" \
