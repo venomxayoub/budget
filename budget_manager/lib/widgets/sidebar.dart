@@ -34,6 +34,8 @@ class _SidebarState extends State<Sidebar> {
               subtitle: const Text('Select a legacy .db file'),
               onTap: widget.onImportDatabase,
             ),
+            _UpdateButton(),
+            const Spacer(),
             _NavItem(
               icon: Icons.receipt_long,
               label: 'Entries',
@@ -46,8 +48,6 @@ class _SidebarState extends State<Sidebar> {
               isActive: widget.activePage == 'subscriptions',
               onTap: () => widget.onPageChanged('subscriptions'),
             ),
-            _UpdateButton(),
-            const Spacer(),
             _NavItem(
               icon: Icons.category,
               label: 'Categories',
@@ -154,9 +154,9 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.3.0';
+    const version = '1.3.1';
     const downloadUrl =
-        'https://github.com/venomxayoub/budget/releases/latest/download/app-release.apk';
+        'https://github.com/venomxayoub/budget/releases/download/v$version/BudgetManager-v$version.apk';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

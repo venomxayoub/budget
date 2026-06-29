@@ -64,6 +64,36 @@ void main() {
     expect(find.text('Archived Debt Profiles'), findsOneWidget);
   });
 
+  testWidgets('drawer keeps data controls above bottom navigation links', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => TransactionProvider(),
+        child: const BudgetManagerApp(),
+      ),
+    );
+
+    await tester.dragFrom(const Offset(64, 300), const Offset(300, 0));
+    await tester.pumpAndSettle();
+
+    final importBottom = tester.getBottomLeft(
+      find.text('Import Previous Data'),
+    ).dy;
+    final updateBottom = tester.getBottomLeft(find.text('Update')).dy;
+
+    for (final label in [
+      'Entries',
+      'Subscriptions',
+      'Categories',
+      'Debts & Loans',
+      'Archive',
+    ]) {
+      expect(tester.getTopLeft(find.text(label)).dy, greaterThan(importBottom));
+      expect(tester.getTopLeft(find.text(label)).dy, greaterThan(updateBottom));
+    }
+  });
+
   testWidgets('drawer opens the subscriptions view and New form', (
     WidgetTester tester,
   ) async {

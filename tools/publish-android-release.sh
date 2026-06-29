@@ -166,6 +166,7 @@ PUBSPEC_VERSION="$(read_pubspec_version "$APP_DIR/pubspec.yaml")"
 VERSION_NAME="${PUBSPEC_VERSION%+*}"
 BUILD_NUMBER="${PUBSPEC_VERSION##*+}"
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || die "Invalid build number: $BUILD_NUMBER"
+VERSIONED_ASSET_NAME="BudgetManager-v${VERSION_NAME}.apk"
 
 ANDROID_VERSION_NAME="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' \
   "$APP_DIR/android/app/build.gradle.kts")"
@@ -209,8 +210,8 @@ if [[ "$DRY_RUN" == false ]]; then
   fi
 fi
 
-printf 'Repository: %s\nVersion:    %s\nBuild:      %s\nTag:        %s\nCommit:     %s\n' \
-  "$REPOSITORY" "$VERSION_NAME" "$BUILD_NUMBER" "$TAG" "$HEAD_SHA"
+printf 'Repository:  %s\nVersion:     %s\nBuild:       %s\nTag:         %s\nAsset:       %s\nCommit:      %s\n' \
+  "$REPOSITORY" "$VERSION_NAME" "$BUILD_NUMBER" "$TAG" "$VERSIONED_ASSET_NAME" "$HEAD_SHA"
 
 log "Running Flutter checks"
 cd "$APP_DIR"
@@ -269,20 +270,20 @@ gh release create "$TAG" \
   --target "$HEAD_SHA" \
   --title "$TAG" \
   --notes-file "$COMBINED_NOTES" \
-  "$APK_PATH"
+  "$APK_PATH#$VERSIONED_ASSET_NAME"
 
 log "Verifying published release"
 PUBLISHED_TARGET="$(gh release view "$TAG" --repo "$REPOSITORY" \
   --json targetCommitish --jq .targetCommitish)"
 PUBLISHED_DIGEST="$(gh release view "$TAG" --repo "$REPOSITORY" \
-  --json assets --jq '.assets[] | select(.name == "app-release.apk") | .digest')"
+  --json assets --jq '.assets[] | select(.name == "'"$VERSIONED_ASSET_NAME"'") | .digest')"
 RELEASE_URL="$(gh release view "$TAG" --repo "$REPOSITORY" --json url --jq .url)"
 
 [[ "$PUBLISHED_TARGET" == "$HEAD_SHA" ]] \
   || die "Published target ($PUBLISHED_TARGET) does not match $HEAD_SHA"
 [[ "$PUBLISHED_DIGEST" == "sha256:$APK_SHA256" ]] \
   || die "Published APK digest ($PUBLISHED_DIGEST) does not match local APK"
-curl -fsSIL "https://github.com/$REPOSITORY/releases/latest/download/app-release.apk" \
+curl -fsSIL "https://github.com/$REPOSITORY/releases/download/$TAG/$VERSIONED_ASSET_NAME" \
   >/dev/null
 
 log "Release published successfully"
