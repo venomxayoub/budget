@@ -514,7 +514,6 @@ void main() {
     expect(find.text('Categories'), findsOneWidget);
     expect(find.text('Debts & Loans'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
-    expect(find.text('Import Previous Data'), findsOneWidget);
     expect(find.text('Update'), findsOneWidget);
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../providers/transaction_provider.dart';
 import '../utils/currency.dart';
 
@@ -78,13 +79,25 @@ class EntryTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${entry.isExpense ? '-' : '+'}${formatCurrency(entry.amountCents)}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: entry.isExpense ? Colors.redAccent : Colors.green,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${entry.isExpense ? '-' : '+'}${formatCurrency(entry.amountCents)}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: entry.isExpense ? Colors.redAccent : Colors.green,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('HH:mm').format(entry.createdAt),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

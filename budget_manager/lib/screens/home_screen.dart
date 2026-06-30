@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/transaction_provider.dart';
-import '../database/database_helper.dart';
 import '../models/expense_category.dart';
 import '../models/income_category.dart';
 import '../utils/currency.dart';
@@ -85,10 +83,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               setState(() => _activePage = page);
               Navigator.pop(context);
             },
-            onImportDatabase: () async {
-              Navigator.pop(context);
-              await _importPreviousData();
-            },
           ),
           body: _buildActivePage(),
           floatingActionButton: _buildFloatingActionButton(),
@@ -139,34 +133,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return null;
   }
 
-  Future<void> _importPreviousData() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['db'],
-        withData: true,
-      );
-      if (result == null || !mounted) return;
-
-      final bytes = result.files.single.bytes;
-      if (bytes == null) {
-        throw StateError('The selected database could not be read.');
-      }
-
-      await DatabaseHelper().importDatabase(bytes);
-      if (!mounted) return;
-      await context.read<TransactionProvider>().loadData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Previous data imported successfully')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not import data: $error')));
-    }
-  }
 
   void _openEntryForm(BuildContext context, bool isExpense) {
     Navigator.push(

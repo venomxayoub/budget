@@ -4,13 +4,10 @@ import 'package:url_launcher/url_launcher.dart';
 class Sidebar extends StatefulWidget {
   final String activePage;
   final ValueChanged<String> onPageChanged;
-  final Future<void> Function() onImportDatabase;
-
   const Sidebar({
     super.key,
     required this.activePage,
     required this.onPageChanged,
-    required this.onImportDatabase,
   });
 
   @override
@@ -28,12 +25,6 @@ class _SidebarState extends State<Sidebar> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              leading: const Icon(Icons.restore_page_outlined),
-              title: const Text('Import Previous Data'),
-              subtitle: const Text('Select a legacy .db file'),
-              onTap: widget.onImportDatabase,
-            ),
             _UpdateButton(),
             const Spacer(),
             _NavItem(

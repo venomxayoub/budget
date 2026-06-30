@@ -95,9 +95,6 @@ void main() {
     await tester.dragFrom(const Offset(64, 300), const Offset(300, 0));
     await tester.pumpAndSettle();
 
-    final importBottom = tester.getBottomLeft(
-      find.text('Import Previous Data'),
-    ).dy;
     final updateBottom = tester.getBottomLeft(find.text('Update')).dy;
 
     for (final label in [
@@ -107,7 +104,6 @@ void main() {
       'Debts & Loans',
       'Archive',
     ]) {
-      expect(tester.getTopLeft(find.text(label)).dy, greaterThan(importBottom));
       expect(tester.getTopLeft(find.text(label)).dy, greaterThan(updateBottom));
     }
   });

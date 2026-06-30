@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -44,66 +43,6 @@ class DatabaseHelper {
     _database = null;
   }
 
-  Future<void> importDatabase(Uint8List bytes) async {
-    if (_overridePath != null) {
-      throw StateError('Database import is unavailable in tests.');
-    }
-
-    final targetPath = join(await getDatabasesPath(), _dbFileName);
-    final importPath = '$targetPath.import';
-    final rollbackPath = '$targetPath.rollback';
-    final importFile = File(importPath);
-    await importFile.writeAsBytes(bytes, flush: true);
-
-    Database? candidate;
-    try {
-      try {
-        candidate = await openReadOnlyDatabase(importPath);
-        final integrity = await candidate.rawQuery('PRAGMA integrity_check');
-        if (integrity.single.values.single != 'ok') {
-          throw const FormatException('The selected database is corrupted.');
-        }
-        final tables = await candidate.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type = 'table'",
-        );
-        final names = tables.map((table) => table['name']).toSet();
-        const requiredTables = {
-          'expense_categories',
-          'income_categories',
-          'expenses',
-          'incomes',
-        };
-        if (!names.containsAll(requiredTables)) {
-          throw const FormatException(
-            'The selected file is not a Budget Manager database.',
-          );
-        }
-      } finally {
-        await candidate?.close();
-      }
-    } catch (_) {
-      if (await importFile.exists()) await importFile.delete();
-      rethrow;
-    }
-
-    await close();
-    final target = File(targetPath);
-    final rollback = File(rollbackPath);
-    try {
-      if (await rollback.exists()) await rollback.delete();
-      if (await target.exists()) await target.rename(rollbackPath);
-      await importFile.rename(targetPath);
-      await database;
-      if (await rollback.exists()) await rollback.delete();
-    } catch (_) {
-      await close();
-      if (await target.exists()) await target.delete();
-      if (await rollback.exists()) await rollback.rename(targetPath);
-      rethrow;
-    } finally {
-      if (await importFile.exists()) await importFile.delete();
-    }
-  }
 
   Future<Database> _initDatabase() async {
     final path = _overridePath ?? join(await getDatabasesPath(), _dbFileName);
