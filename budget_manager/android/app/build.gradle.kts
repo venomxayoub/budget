@@ -23,8 +23,8 @@ android {
         applicationId = "com.example.budget_manager"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 13
-        versionName = "1.3.2"
+        versionCode = 14
+        versionName = "1.3.3"
     }
 
     signingConfigs {
