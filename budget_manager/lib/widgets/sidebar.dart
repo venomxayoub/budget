@@ -145,7 +145,7 @@ class _UpdateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const version = '1.3.3';
+    const version = '1.3.4';
     const downloadUrl =
         'https://github.com/venomxayoub/budget/releases/download/v$version/BudgetManager-v$version.apk';
 
