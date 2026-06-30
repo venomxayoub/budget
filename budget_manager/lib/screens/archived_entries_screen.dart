@@ -103,14 +103,14 @@ class ArchivedEntriesScreen extends StatelessWidget {
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.only(right: 8),
-                                    child: IconButton(
+                                    child: OutlinedButton.icon(
                                       key: Key('restore-entry-${entry.id}'),
-                                      icon: const Icon(Icons.restore),
-                                      tooltip: 'Restore',
                                       onPressed: () => _restoreEntry(
                                         context,
                                         entry,
                                       ),
+                                      icon: const Icon(Icons.restore),
+                                      label: const Text('Restore'),
                                     ),
                                   ),
                                 ],

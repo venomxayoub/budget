@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/expense.dart';
+import '../models/expense_category.dart';
 import '../models/income.dart';
+import '../models/income_category.dart';
 import '../providers/transaction_provider.dart';
 import '../utils/currency.dart';
 import '../widgets/category_badge.dart';
@@ -71,19 +73,29 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     var categoryIds = _selectedCategoryIds.toList();
     if (categoryIds.isEmpty) {
       final categories = provider.getCategoriesList(widget.isExpense);
-      if (categories.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Add a category before creating an entry'),
-          ),
-        );
-        return;
-      }
       final other = categories.cast<dynamic>().firstWhere(
         (category) => category.name == 'Other',
-        orElse: () => categories.first,
+        orElse: () => null,
       );
-      categoryIds = [other.id as int];
+      if (other != null) {
+        categoryIds = [other.id as int];
+      } else if (widget.isExpense) {
+        await provider.addExpenseCategory(
+          ExpenseCategory(name: 'Other', emoji: '📦'),
+        );
+        final added = provider.expenseCategories.firstWhere(
+          (c) => c.name == 'Other',
+        );
+        categoryIds = [added.id!];
+      } else {
+        await provider.addIncomeCategory(
+          IncomeCategory(name: 'Other', emoji: '📦'),
+        );
+        final added = provider.incomeCategories.firstWhere(
+          (c) => c.name == 'Other',
+        );
+        categoryIds = [added.id!];
+      }
     }
 
     setState(() => _isSubmitting = true);

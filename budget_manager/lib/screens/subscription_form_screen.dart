@@ -141,7 +141,7 @@ class _SubscriptionFormScreenState extends State<SubscriptionFormScreen> {
           const SizedBox(height: 16),
           DropdownButtonFormField<SubscriptionPeriod>(
             key: const Key('subscription-period'),
-            value: _period,
+            initialValue: _period,
             decoration: const InputDecoration(
               labelText: 'Frequency',
               border: OutlineInputBorder(),
